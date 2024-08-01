@@ -1,3 +1,188 @@
-<html>
-Hello world
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            grid-template-columns: 1fr;
+            height: 100vh;
+        }
+
+        header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 1fr 3fr;
+            grid-gap: 10px;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        @media (max-width: 768px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        nav {
+            background-color: #f4f4f4;
+            padding: 10px;
+        }
+
+        nav ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        nav ul li {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+
+        nav ul li:hover {
+            background-color: #ddd;
+        }
+
+        nav ul li a {
+            text-decoration: none;
+            color: #333;
+            display: block;
+            cursor: pointer;
+        }
+
+        section {
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        footer {
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 10px;
+        }
+
+        .card {
+            background-color: #f9f9f9;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+            border-radius: 5px;
+        }
+
+        .card h3 {
+            margin: 0 0 10px;
+        }
+
+        .card p {
+            margin: 0;
+        }
+
+        .data-display {
+            margin-top: 20px;
+            font-size: 14px;
+            white-space: pre-wrap; /* Preserve whitespace */
+            background-color: #eaeaea;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #default-content {
+            display: block;
+        }
+
+        #test-content {
+            display: none;
+        }
+    </style>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const navLinks = document.querySelectorAll('nav ul li a');
+            const defaultContent = document.getElementById('default-content');
+            const testContent = document.getElementById('test-content');
+            const dataDisplay = document.querySelector('.data-display');
+
+            navLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    const target = this.getAttribute('data-target');
+
+                    if (target === 'test') {
+                        defaultContent.style.display = 'none';
+                        testContent.style.display = 'block';
+                        
+                        // Fetch data dynamically from /api/data
+                        fetch('/api/data')
+                            .then(response => response.json())
+                            .then(data => {
+                                dataDisplay.textContent = JSON.stringify(data, null, 2); // Pretty print JSON
+                            })
+                            .catch(error => {
+                                dataDisplay.textContent = 'Error fetching data: ' + error;
+                                console.error('Error fetching data:', error);
+                            });
+                    } else {
+                        defaultContent.style.display = 'block';
+                        testContent.style.display = 'none';
+                    }
+                });
+            });
+        });
+    </script>
+</head>
+<body>
+    <header>
+        <h1>Dashboard</h1>
+    </header>
+    <main>
+        <nav>
+            <ul>
+                <li><a href="#" data-target="home">Home</a></li>
+                <li><a href="#" data-target="profile">Profile</a></li>
+                <li><a href="#" data-target="settings">Settings</a></li>
+                <li><a href="#" data-target="help">Help</a></li>
+                <li><a href="#" data-target="logout">Logout</a></li>
+                <li><a href="#" data-target="test">Test</a></li> <!-- New Test tab -->
+            </ul>
+        </nav>
+        <section id="default-content">
+            <div class="card">
+                <h3>Welcome!</h3>
+                <p>This is a responsive dashboard template.</p>
+            </div>
+            <div class="card">
+                <h3>Stats</h3>
+                <p>Here you can add your dashboard statistics.</p>
+            </div>
+            <div class="card">
+                <h3>News</h3>
+                <p>Latest updates and news can go here.</p>
+            </div>
+        </section>
+        <section id="test-content">
+            <div class="card">
+                <h3>Test Data</h3>
+                <p>The data fetched from the server will be displayed here:</p>
+                <div class="data-display"></div>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>Dashboard &copy; 2024. All rights reserved.</p>
+    </footer>
+</body>
 </html>
+
