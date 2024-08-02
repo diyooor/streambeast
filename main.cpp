@@ -10,13 +10,16 @@
 #include <boost/config.hpp>
 #include <algorithm>
 #include <cstdlib>
-#include <fstream> // Include fstream for file operations
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <thread>
 #include <vector>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -24,8 +27,13 @@ namespace net = boost::asio;
 namespace ssl = boost::asio::ssl;
 using tcp = boost::asio::ip::tcp;
 
-beast::string_view mime_type(beast::string_view path)
-{
+// Global vector to store images
+std::vector<std::vector<unsigned char>> image_storage;
+std::mutex storage_mutex;
+std::condition_variable storage_cv;
+bool image_available = false;
+
+beast::string_view mime_type(beast::string_view path) {
     using beast::iequals;
     auto const ext = [&path] {
         auto const pos = path.rfind(".");
@@ -33,53 +41,31 @@ beast::string_view mime_type(beast::string_view path)
             return beast::string_view{};
         return path.substr(pos);
     }();
-    if (iequals(ext, ".htm"))
-        return "text/html";
-    if (iequals(ext, ".html"))
-        return "text/html";
-    if (iequals(ext, ".php"))
-        return "text/html";
-    if (iequals(ext, ".css"))
-        return "text/css";
-    if (iequals(ext, ".txt"))
-        return "text/plain";
-    if (iequals(ext, ".js"))
-        return "application/javascript";
-    if (iequals(ext, ".json"))
-        return "application/json";
-    if (iequals(ext, ".xml"))
-        return "application/xml";
-    if (iequals(ext, ".swf"))
-        return "application/x-shockwave-flash";
-    if (iequals(ext, ".flv"))
-        return "video/x-flv";
-    if (iequals(ext, ".png"))
-        return "image/png";
-    if (iequals(ext, ".jpe"))
-        return "image/jpeg";
-    if (iequals(ext, ".jpeg"))
-        return "image/jpeg";
-    if (iequals(ext, ".jpg"))
-        return "image/jpeg";
-    if (iequals(ext, ".gif"))
-        return "image/gif";
-    if (iequals(ext, ".bmp"))
-        return "image/bmp";
-    if (iequals(ext, ".ico"))
-        return "image/vnd.microsoft.icon";
-    if (iequals(ext, ".tiff"))
-        return "image/tiff";
-    if (iequals(ext, ".tif"))
-        return "image/tiff";
-    if (iequals(ext, ".svg"))
-        return "image/svg+xml";
-    if (iequals(ext, ".svgz"))
-        return "image/svg+xml";
+    if (iequals(ext, ".htm")) return "text/html";
+    if (iequals(ext, ".html")) return "text/html";
+    if (iequals(ext, ".php")) return "text/html";
+    if (iequals(ext, ".css")) return "text/css";
+    if (iequals(ext, ".txt")) return "text/plain";
+    if (iequals(ext, ".js")) return "application/javascript";
+    if (iequals(ext, ".json")) return "application/json";
+    if (iequals(ext, ".xml")) return "application/xml";
+    if (iequals(ext, ".swf")) return "application/x-shockwave-flash";
+    if (iequals(ext, ".flv")) return "video/x-flv";
+    if (iequals(ext, ".png")) return "image/png";
+    if (iequals(ext, ".jpe")) return "image/jpeg";
+    if (iequals(ext, ".jpeg")) return "image/jpeg";
+    if (iequals(ext, ".jpg")) return "image/jpeg";
+    if (iequals(ext, ".gif")) return "image/gif";
+    if (iequals(ext, ".bmp")) return "image/bmp";
+    if (iequals(ext, ".ico")) return "image/vnd.microsoft.icon";
+    if (iequals(ext, ".tiff")) return "image/tiff";
+    if (iequals(ext, ".tif")) return "image/tiff";
+    if (iequals(ext, ".svg")) return "image/svg+xml";
+    if (iequals(ext, ".svgz")) return "image/svg+xml";
     return "application/text";
 }
 
-std::string path_cat(beast::string_view base, beast::string_view path)
-{
+std::string path_cat(beast::string_view base, beast::string_view path) {
     if (base.empty())
         return std::string(path);
     std::string result(base);
@@ -100,145 +86,31 @@ std::string path_cat(beast::string_view base, beast::string_view path)
     return result;
 }
 
-class ClientService {
-public:
-    ClientService() : resolver_(ioc_), ctx_(ssl::context::sslv23_client), stream_(ioc_, ctx_) {
-        // Set SNI Hostname (many hosts need this to handshake successfully)
-        if (!SSL_set_tlsext_host_name(stream_.native_handle(), "example.com")) {
-            boost::system::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
-            throw boost::system::system_error{ec};
-        }
-    }
-
-    std::string get(const std::string& host, const std::string& port, const std::string& target, int version = 11) {
-        try {
-            auto const results = resolver_.resolve(host, port);
-            beast::get_lowest_layer(stream_).connect(results);
-
-            // SSL Handshake
-            stream_.handshake(ssl::stream_base::client);
-
-            http::request<http::string_body> req{http::verb::get, target, version};
-            req.set(http::field::host, host);
-
-            http::write(stream_, req);
-            beast::flat_buffer buffer;
-            http::response<http::dynamic_body> res;
-            http::read(stream_, buffer, res);
-
-            if (res.result() == http::status::moved_permanently || res.result() == http::status::found) {
-                auto location = res[http::field::location];
-                std::cout << "Redirected to: " << location << std::endl;
-                return follow_redirect(location);
-            }
-
-            beast::error_code ec;
-            stream_.shutdown(ec);
-            if (ec == net::error::eof) {
-                ec = {}; 
-            }
-            if (ec) {
-                throw beast::system_error{ec};
-            }
-
-            return beast::buffers_to_string(res.body().data());
-        } catch (std::exception const& e) {
-            std::cerr << "Error: " << e.what() << std::endl;
-            return "";
-        }
-    }
-
-private:
-    net::io_context ioc_;
-    ssl::context ctx_;
-    tcp::resolver resolver_;
-    beast::ssl_stream<beast::tcp_stream> stream_;
-
-    std::string follow_redirect(const std::string& location) {
-        try {
-            std::string protocol, host, port = "80", target = "/";
-            auto pos = location.find("://");
-            if (pos != std::string::npos) {
-                protocol = location.substr(0, pos);
-                host = location.substr(pos + 3);
-            } else {
-                protocol = "http";
-                host = location;
-            }
-
-            if (protocol == "https") {
-                port = "443";
-            }
-
-            pos = host.find("/");
-            if (pos != std::string::npos) {
-                target = host.substr(pos);
-                host = host.substr(0, pos);
-            }
-
-            std::cout << "Redirecting to: " << protocol << "://" << host << target << std::endl;
-
-            return get(host, port, target);
-        }
-        catch (const std::exception& e) {
-            return std::string("Error following redirect: ") + e.what();
-        }
-    }
-};
-
 class Application {
 public:
-    Application() : client_service_(std::make_shared<ClientService>()) {}
+    Application() {}
 
-    std::string scrape_site(const std::string& url) {
-        try {
-            std::string protocol, host, port = "80", target = "/";
-            auto pos = url.find("://");
-
-            // Default to http if no protocol is specified
-            if (pos != std::string::npos) {
-                protocol = url.substr(0, pos);
-                host = url.substr(pos + 3);
-            } else {
-                protocol = "http";
-                host = url;
-            }
-
-            // Check for HTTPS protocol
-            if (protocol == "https") {
-                port = "443";
-            }
-
-            // Extract the path from the host
-            pos = host.find("/");
-            if (pos != std::string::npos) {
-                target = host.substr(pos);
-                host = host.substr(0, pos);
-            }
-
-            std::cout << "Fetching data from: " << protocol << "://" << host << target << std::endl;
-
-            std::string xml_data = client_service_->get(host, port, target);
-
-            // Save the data to a file
-            std::ofstream file("scraped_data.xml");
-            if (file.is_open()) {
-                file << xml_data;
-                file.close();
-                std::cout << "Data saved to scraped_data.xml" << std::endl;
-            } else {
-                std::cerr << "Unable to open file for writing." << std::endl;
-            }
-
-            return xml_data;
-        }
-        catch (const std::exception& e) {
-            return std::string("Error fetching site: ") + e.what();
-        }
+    void handle_post_image(std::vector<unsigned char>&& image_data) {
+        std::lock_guard<std::mutex> lock(storage_mutex);
+        image_storage.push_back(std::move(image_data));
+        image_available = true;
+        storage_cv.notify_one();
     }
 
-private:
-    std::shared_ptr<ClientService> client_service_;
+    std::vector<unsigned char> handle_get_stream() {
+        std::unique_lock<std::mutex> lock(storage_mutex);
+        if (storage_cv.wait_for(lock, std::chrono::seconds(1), [] { return image_available; })) {
+            if (!image_storage.empty()) {
+                std::vector<unsigned char> image_data = std::move(image_storage.back());
+                image_storage.pop_back();
+                if (image_storage.empty()) {
+                    image_available = false;
+                }
+                return image_data;
+            }
+        }
+        return {};
+    }
 };
 
 template <class Body, class Allocator>
@@ -256,63 +128,39 @@ http::message_generator handle_request(
         return res;
     };
 
-    if (req.method() == http::verb::get && req.target() == "/api/data") {
-        std::string json_data = R"({
-            "name": "John Doe",
-            "age": 30,
-            "email": "john.doe@example.com"
-        })";
-
-        // Return the JSON data as a response
-        return res_(http::status::ok, json_data, "application/json");
-    }
-
     if (req.method() == http::verb::post && req.target() == "/api/external") {
         try {
-            boost::json::value jv = boost::json::parse(req.body());
+            // Extract the image from the request body
+            std::vector<unsigned char> image_data(req.body().begin(), req.body().end());
 
-            if (jv.is_object()) {
-                boost::json::object& obj = jv.as_object();
+            // Store the image using the application instance
+            app->handle_post_image(std::move(image_data));
 
-                if (obj.contains("scrape")) {
-                    auto scrape_value = obj["scrape"];
+            boost::json::object response_obj;
+            response_obj["status"] = "success";
+            response_obj["message"] = "Image uploaded successfully";
+            std::string response_body = boost::json::serialize(response_obj);
 
-                    if (scrape_value.is_string()) {
-                        std::string url = scrape_value.as_string().c_str();
-                        std::string xml_data = app->scrape_site(url);
-
-                        boost::json::object response_obj;
-                        response_obj["status"] = "success";
-                        response_obj["url"] = url;
-                        response_obj["data"] = xml_data;
-                        std::string response_body = boost::json::serialize(response_obj);
-
-                        return res_(http::status::ok, response_body, "application/json");
-                    }
-                    else if (scrape_value.is_array()) {
-                        boost::json::array& urls = scrape_value.as_array();
-                        boost::json::object response_obj;
-                        response_obj["status"] = "success";
-
-                        for (auto& site : urls) {
-                            if (site.is_string()) {
-                                std::string url = site.as_string().c_str();
-                                std::string xml_data = app->scrape_site(url);
-                                response_obj[url] = xml_data;
-                            }
-                        }
-
-                        std::string response_body = boost::json::serialize(response_obj);
-                        return res_(http::status::ok, response_body, "application/json");
-                    }
-                }
-            }
-
-            return res_(http::status::bad_request, "Missing or invalid 'scrape' key in JSON", "application/json");
+            return res_(http::status::ok, response_body, "application/json");
+        } catch (const std::exception& e) {
+            return res_(http::status::bad_request, std::string("Error uploading image: ") + e.what(), "application/json");
         }
-        catch (const boost::system::system_error& e) {
-            return res_(http::status::bad_request, std::string("Invalid JSON: ") + e.what(), "application/json");
+    }
+
+    if (req.method() == http::verb::get && req.target() == "/stream") {
+        std::vector<unsigned char> image_data = app->handle_get_stream();
+
+        if (!image_data.empty()) {
+            // Respond with the image
+            http::response<http::vector_body<unsigned char>> res{http::status::ok, req.version()};
+            res.set(http::field::content_type, "image/jpeg");
+            res.body() = std::move(image_data);
+            res.prepare_payload();
+            return res;
         }
+
+        // No image was available
+        return res_(http::status::no_content, "", "application/json");
     }
 
     if (req.method() != http::verb::get &&
@@ -360,16 +208,14 @@ http::message_generator handle_request(
     return res;
 }
 
-void fail(beast::error_code ec, char const* what)
-{
+void fail(beast::error_code ec, char const* what) {
     if (ec == net::ssl::error::stream_truncated)
         return;
 
     std::cerr << what << ": " << ec.message() << "\n";
 }
 
-class session : public std::enable_shared_from_this<session>
-{
+class session : public std::enable_shared_from_this<session> {
     beast::ssl_stream<beast::tcp_stream> stream_;
     beast::flat_buffer buffer_;
     std::shared_ptr<std::string const> doc_root_;
@@ -505,8 +351,7 @@ public:
     }
 };
 
-class listener : public std::enable_shared_from_this<listener>
-{
+class listener : public std::enable_shared_from_this<listener> {
     net::io_context& ioc_;
     ssl::context& ctx_;
     tcp::acceptor acceptor_;
@@ -596,10 +441,8 @@ private:
     }
 };
 
-int main(int argc, char* argv[])
-{
-    if (argc != 5)
-    {
+int main(int argc, char* argv[]) {
+    if (argc != 5) {
         std::cerr <<
             "Usage: http-server-async-ssl <address> <port> <doc_root> <threads>\n" <<
             "Example:\n" <<
