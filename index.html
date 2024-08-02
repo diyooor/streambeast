@@ -181,7 +181,8 @@
 
         #test-content,
         #contact-content,
-        #stream-content {
+        #stream-content,
+        #gallery-content {
             display: none;
         }
 
@@ -299,11 +300,14 @@
             const testContent = document.getElementById('test-content');
             const contactContent = document.getElementById('contact-content');
             const streamContent = document.getElementById('stream-content');
+            const galleryContent = document.getElementById('gallery-content');
             const dataDisplay = document.querySelector('.data-display');
             const themeToggle = document.getElementById('theme-toggle');
             const navToggle = document.getElementById('nav-toggle');
             const nav = document.querySelector('nav');
             const main = document.querySelector('main');
+            const timestampSelectors = document.getElementById('timestamp-selectors');
+            const selectedImage = document.getElementById('selected-image');
             let streamInterval;
 
             // Load theme from localStorage
@@ -320,6 +324,7 @@
                     testContent.style.display = 'none';
                     contactContent.style.display = 'none';
                     streamContent.style.display = 'none';
+                    galleryContent.style.display = 'none';
 
                     clearInterval(streamInterval); // Clear any existing interval
 
@@ -367,6 +372,9 @@
                                     streamContent.innerHTML = '<p>No image available</p>';
                                 });
                         }, 200);
+                    } else if (target === 'gallery') {
+                        galleryContent.style.display = 'block';
+                        startImagePlayback();
                     } else {
                         defaultContent.style.display = 'block';
                     }
@@ -391,6 +399,58 @@
                     main.style.gridTemplateColumns = '1fr';
                 }
             });
+
+            function startImagePlayback() {
+                fetch('/timestamps')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.timestamps.length > 0) {
+                            playImagesSequentially(data.timestamps);
+                        } else {
+                            selectedImage.innerHTML = '<p>No images available</p>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching timestamps:', error);
+                    });
+            }
+
+            function playImagesSequentially(timestamps) {
+                let index = 0;
+                const delay = 500; // Delay between frames (milliseconds)
+
+                function showNextImage() {
+                    if (index < timestamps.length) {
+                        const timestamp = timestamps[index];
+                        fetchImageByTimestamp(timestamp)
+                            .then(() => {
+                                index++;
+                                setTimeout(showNextImage, delay);
+                            });
+                    }
+                }
+
+                showNextImage();
+            }
+
+            function fetchImageByTimestamp(timestamp) {
+                return fetch(`/image/${encodeURIComponent(timestamp)}`)
+                    .then(response => {
+                        if (response.ok && response.headers.get('Content-Type').startsWith('image')) {
+                            return response.blob();
+                        }
+                        throw new Error('Image not found');
+                    })
+                    .then(blob => {
+                        const url = URL.createObjectURL(blob);
+                        selectedImage.innerHTML = `<img src="${url}" alt="Image ${timestamp}" class="stream-image">`;
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching image:', error);
+                        selectedImage.innerHTML = '<p>Image not found</p>';
+                    });
+            }
         });
     </script>
 </head>
@@ -410,7 +470,8 @@
                 <li><a href="#" data-target="test" title="Test"><i class="fas fa-vial"></i></a></li>
                 <li><a href="#" data-target="contact" title="Contact"><i class="fas fa-envelope"></i></a></li>
                 <li><a href="#" data-target="stream" title="Stream"><i class="fas fa-play-circle"></i></a></li>
-                <!-- New Stream Tab -->
+                <!-- New Gallery Tab -->
+                <li><a href="#" data-target="gallery" title="Gallery"><i class="fas fa-images"></i></a></li>
                 <li><a href="#" data-target="help" title="Help"><i class="fas fa-question-circle"></i></a></li>
                 <li><a href="#" data-target="settings" title="Settings"><i class="fas fa-cog"></i></a></li>
                 <li><a href="#" data-target="logout" title="Logout"><i class="fas fa-sign-out-alt"></i></a></li>
@@ -489,6 +550,14 @@
                 <!-- Image will be appended here by JavaScript -->
             </div>
         </section>
+        <section id="gallery-content">
+            <div class="card">
+                <h3>Image Gallery</h3>
+                <p>The video-on-demand playback of the images will be shown here:</p>
+                <div id="selected-image"></div>
+            </div>
+        </section>
+
     </main>
     <footer>
         <p>&copy; 2024. All rights reserved.</p>
