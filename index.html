@@ -1,25 +1,92 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        :root {
+            --background-color: #f4f4f9;
+            --text-color: #333;
+            --card-background: #fff;
+            --nav-background: #e0e0e0;
+            --header-footer-background: #d0d0d0;
+            --card-shadow: rgba(0, 0, 0, 0.1);
+            --button-text-color: #333;
+            --button-background-color: transparent;
+            --button-border-color: #333;
+        }
+
+        body.dark-mode {
+            --background-color: #121212;
+            --text-color: #ffffff;
+            --card-background: #1e1e1e;
+            --nav-background: #232323;
+            --header-footer-background: #1e1e1e;
+            --card-shadow: rgba(0, 0, 0, 0.3);
+            --button-text-color: #ffffff;
+            --button-background-color: transparent;
+            --button-border-color: #ffffff;
+        }
+
         body {
             margin: 0;
             font-family: 'Roboto', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
             display: grid;
             grid-template-rows: auto 1fr auto;
-            grid-template-columns: 1fr;
             height: 100vh;
         }
 
-        header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 15px;
+        header,
+        footer {
+            background-color: var(--header-footer-background);
+            padding: 10px;
             text-align: center;
+            border-bottom: 1px solid var(--card-shadow);
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            margin: 0;
+            color: var(--text-color);
+        }
+
+        .button-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        #nav-toggle,
+        #theme-toggle {
+            background-color: var(--button-background-color);
+            border: 2px solid var(--button-border-color);
+            border-radius: 5px;
+            color: var(--button-text-color);
+            padding: 5px 10px;
+            cursor: pointer;
+            transition: background-color 0.3s, color 0.3s;
+            font-size: 18px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+        }
+
+        #nav-toggle:hover,
+        #theme-toggle:hover {
+            background-color: var(--button-border-color);
+            color: var(--background-color);
         }
 
         main {
@@ -30,26 +97,26 @@
             overflow-y: auto;
         }
 
-        @media (max-width: 768px) {
-            main {
-                grid-template-columns: 1fr;
-            }
-        }
-
         nav {
-            background-color: #f4f4f4;
+            background-color: var(--nav-background);
             padding: 10px;
+            border-right: 1px solid var(--card-shadow);
+            display: flex;
+            flex-direction: column;
         }
 
         nav ul {
             list-style-type: none;
             padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
         }
 
         nav ul li {
             padding: 10px;
             text-align: center;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--card-shadow);
         }
 
         nav ul li:hover {
@@ -58,47 +125,45 @@
 
         nav ul li a {
             text-decoration: none;
-            color: #333;
+            color: var(--text-color);
             display: block;
             cursor: pointer;
         }
 
         section {
-            background-color: #fff;
+            background-color: var(--card-background);
             padding: 20px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-
-        footer {
-            background-color: #333;
-            color: white;
-            text-align: center;
-            padding: 10px;
+            box-shadow: 0 0 10px var(--card-shadow);
+            border-radius: 5px;
         }
 
         .card {
-            background-color: #f9f9f9;
+            background-color: var(--card-background);
             padding: 15px;
             margin-bottom: 20px;
-            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 5px var(--card-shadow);
             border-radius: 5px;
         }
 
         .card h3 {
             margin: 0 0 10px;
+            color: var(--text-color);
         }
 
         .card p {
             margin: 0;
+            color: #666;
         }
 
         .data-display {
             margin-top: 20px;
             font-size: 14px;
-            white-space: pre-wrap; /* Preserve whitespace */
-            background-color: #eaeaea;
+            white-space: pre-wrap;
+            background-color: var(--nav-background);
             padding: 10px;
             border-radius: 5px;
+            color: var(--text-color);
+            border: 1px solid var(--card-shadow);
         }
 
         #default-content {
@@ -108,27 +173,74 @@
         #test-content {
             display: none;
         }
+
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+            }
+
+            #nav-toggle {
+                display: block;
+                margin-right: 10px;
+            }
+
+            nav {
+                display: none;
+            }
+
+            nav ul {
+                flex-direction: column;
+            }
+
+            main {
+                grid-template-columns: 1fr;
+            }
+
+            nav ul li {
+                border-bottom: 1px solid var(--card-shadow);
+            }
+
+            nav ul li:hover {
+                background-color: #ddd;
+            }
+
+            nav ul li a {
+                color: var(--text-color);
+            }
+
+            .button-container {
+                justify-content: center;
+            }
+        }
     </style>
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
+        document.addEventListener("DOMContentLoaded", function () {
             const navLinks = document.querySelectorAll('nav ul li a');
             const defaultContent = document.getElementById('default-content');
             const testContent = document.getElementById('test-content');
             const dataDisplay = document.querySelector('.data-display');
+            const themeToggle = document.getElementById('theme-toggle');
+            const navToggle = document.getElementById('nav-toggle');
+            const nav = document.querySelector('nav');
+
+            // Load theme from localStorage
+            const currentTheme = localStorage.getItem('theme') || 'light';
+            if (currentTheme === 'dark') {
+                document.body.classList.add('dark-mode');
+            }
 
             navLinks.forEach(link => {
-                link.addEventListener('click', function() {
+                link.addEventListener('click', function () {
                     const target = this.getAttribute('data-target');
 
                     if (target === 'test') {
                         defaultContent.style.display = 'none';
                         testContent.style.display = 'block';
-                        
-                        // Fetch data dynamically from /api/data
+
                         fetch('/api/data')
                             .then(response => response.json())
                             .then(data => {
-                                dataDisplay.textContent = JSON.stringify(data, null, 2); // Pretty print JSON
+                                dataDisplay.textContent = JSON.stringify(data, null, 2);
                             })
                             .catch(error => {
                                 dataDisplay.textContent = 'Error fetching data: ' + error;
@@ -140,12 +252,31 @@
                     }
                 });
             });
+
+            themeToggle.addEventListener('click', function () {
+                document.body.classList.toggle('dark-mode');
+                const newTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+                localStorage.setItem('theme', newTheme); // Save the theme to localStorage
+            });
+
+            navToggle.addEventListener('click', function () {
+                if (nav.style.display === 'none' || nav.style.display === '') {
+                    nav.style.display = 'flex';
+                } else {
+                    nav.style.display = 'none';
+                }
+            });
         });
     </script>
 </head>
+
 <body>
     <header>
-        <h1>Dashboard</h1>
+        <div class="button-container">
+            <button id="nav-toggle"><i class="fas fa-bars"></i></button>
+            <h1></h1>
+            <button id="theme-toggle"><i class="fas fa-power-off"></i></button>
+        </div>
     </header>
     <main>
         <nav>
@@ -155,13 +286,13 @@
                 <li><a href="#" data-target="settings">Settings</a></li>
                 <li><a href="#" data-target="help">Help</a></li>
                 <li><a href="#" data-target="logout">Logout</a></li>
-                <li><a href="#" data-target="test">Test</a></li> <!-- New Test tab -->
+                <li><a href="#" data-target="test">Test</a></li>
             </ul>
         </nav>
         <section id="default-content">
             <div class="card">
                 <h3>Welcome!</h3>
-                <p>This is a responsive dashboard template.</p>
+                <p>This is a minimal dashboard template.</p>
             </div>
             <div class="card">
                 <h3>Stats</h3>
@@ -181,8 +312,9 @@
         </section>
     </main>
     <footer>
-        <p>Dashboard &copy; 2024. All rights reserved.</p>
+        <p>&copy; 2024. All rights reserved.</p>
     </footer>
 </body>
+
 </html>
 
