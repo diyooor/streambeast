@@ -27,6 +27,9 @@ namespace net = boost::asio;
 namespace ssl = boost::asio::ssl;
 using tcp = boost::asio::ip::tcp;
 
+// Adjust storage size if necessary
+constexpr size_t MAX_IMAGE_STORAGE = 1000;
+
 // Global vector to store images
 std::vector<std::vector<unsigned char>> image_storage;
 std::mutex storage_mutex;
@@ -86,38 +89,67 @@ std::string path_cat(beast::string_view base, beast::string_view path) {
     return result;
 }
 
-class Application {
-public:
-    Application() {}
+class CameraService {
+    public:
+        CameraService() = default;
 
-    void handle_post_image(std::vector<unsigned char>&& image_data) {
-        std::lock_guard<std::mutex> lock(storage_mutex);
-        image_storage.push_back(std::move(image_data));
-        image_available = true;
-        storage_cv.notify_one();
-    }
-
-    std::vector<unsigned char> handle_get_stream() {
-        std::unique_lock<std::mutex> lock(storage_mutex);
-        if (storage_cv.wait_for(lock, std::chrono::seconds(1), [] { return image_available; })) {
-            if (!image_storage.empty()) {
-                std::vector<unsigned char> image_data = std::move(image_storage.back());
-                image_storage.pop_back();
-                if (image_storage.empty()) {
-                    image_available = false;
-                }
-                return image_data;
+        // Method to add an image to the storage
+        void add_image(std::vector<unsigned char>&& image_data) {
+            std::lock_guard<std::mutex> lock(storage_mutex_);
+            if (image_storage_.size() >= MAX_IMAGE_STORAGE) {
+                image_storage_.erase(image_storage_.begin()); // Maintain the circular buffer
             }
+            image_storage_.emplace_back(std::move(image_data));
+            image_available_ = true;
+            storage_cv_.notify_all();
         }
-        return {};
-    }
+
+        // Method to get the latest image from the storage
+        std::vector<unsigned char> get_latest_image() {
+            std::unique_lock<std::mutex> lock(storage_mutex_);
+            if (storage_cv_.wait_for(lock, std::chrono::seconds(1), [this] { return image_available_; })) {
+                if (!image_storage_.empty()) {
+                    return image_storage_.back(); // Always use the most recent image
+                }
+            }
+            return {};
+        }
+
+    private:
+        std::vector<std::vector<unsigned char>> image_storage_;
+        std::mutex storage_mutex_;
+        std::condition_variable storage_cv_;
+        bool image_available_ = false;
+};
+
+class Application {
+    public:
+        Application() : camera_service_(std::make_shared<CameraService>()) {}
+
+        // Getter for CameraService
+        std::shared_ptr<CameraService> get_camera_service() {
+            return camera_service_;
+        }
+
+        // Handle POST image logic
+        void handle_post_image(std::vector<unsigned char>&& image_data) {
+            camera_service_->add_image(std::move(image_data));
+        }
+
+        // Handle GET stream logic
+        std::vector<unsigned char> handle_get_stream() {
+            return camera_service_->get_latest_image();
+        }
+
+    private:
+        std::shared_ptr<CameraService> camera_service_;
 };
 
 template <class Body, class Allocator>
 http::message_generator handle_request(
-    beast::string_view doc_root,
-    http::request<Body, http::basic_fields<Allocator>>&& req,
-    std::shared_ptr<Application> app)
+        beast::string_view doc_root,
+        http::request<Body, http::basic_fields<Allocator>>&& req,
+        std::shared_ptr<Application> app)
 {
     auto const res_ = [&req](http::status status, const std::string& body, const std::string& content_type = "application/json") {
         http::response<http::string_body> res{status, req.version()};
@@ -164,12 +196,12 @@ http::message_generator handle_request(
     }
 
     if (req.method() != http::verb::get &&
-        req.method() != http::verb::head)
+            req.method() != http::verb::head)
         return res_(http::status::bad_request, "Unknown HTTP-method", "text/html");
 
     if (req.target().empty() ||
-        req.target()[0] != '/' ||
-        req.target().find("..") != beast::string_view::npos)
+            req.target()[0] != '/' ||
+            req.target().find("..") != beast::string_view::npos)
         return res_(http::status::bad_request, "Illegal request-target", "text/html");
 
     std::string path = path_cat(doc_root, req.target());
@@ -199,8 +231,8 @@ http::message_generator handle_request(
 
     http::response<http::file_body> res{
         std::piecewise_construct,
-        std::make_tuple(std::move(body)),
-        std::make_tuple(http::status::ok, req.version())};
+            std::make_tuple(std::move(body)),
+            std::make_tuple(http::status::ok, req.version())};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, mime_type(path));
     res.content_length(size);
@@ -222,133 +254,133 @@ class session : public std::enable_shared_from_this<session> {
     std::shared_ptr<Application> app_;
     http::request<http::string_body> req_;
 
-public:
+    public:
     explicit
         session(
-            tcp::socket&& socket,
-            ssl::context& ctx,
-            std::shared_ptr<std::string const> const& doc_root,
-            std::shared_ptr<Application> app)
+                tcp::socket&& socket,
+                ssl::context& ctx,
+                std::shared_ptr<std::string const> const& doc_root,
+                std::shared_ptr<Application> app)
         : stream_(std::move(socket), ctx)
-        , doc_root_(doc_root), app_(app)
+          , doc_root_(doc_root), app_(app)
     {
     }
 
     void
         run()
-    {
-        net::dispatch(
-            stream_.get_executor(),
-            beast::bind_front_handler(
-                &session::on_run,
-                shared_from_this()));
-    }
+        {
+            net::dispatch(
+                    stream_.get_executor(),
+                    beast::bind_front_handler(
+                        &session::on_run,
+                        shared_from_this()));
+        }
 
     void
         on_run()
-    {
-        beast::get_lowest_layer(stream_).expires_after(
-            std::chrono::seconds(30));
+        {
+            beast::get_lowest_layer(stream_).expires_after(
+                    std::chrono::seconds(30));
 
-        stream_.async_handshake(
-            ssl::stream_base::server,
-            beast::bind_front_handler(
-                &session::on_handshake,
-                shared_from_this()));
-    }
+            stream_.async_handshake(
+                    ssl::stream_base::server,
+                    beast::bind_front_handler(
+                        &session::on_handshake,
+                        shared_from_this()));
+        }
 
     void
         on_handshake(beast::error_code ec)
-    {
-        if (ec)
-            return fail(ec, "handshake");
+        {
+            if (ec)
+                return fail(ec, "handshake");
 
-        do_read();
-    }
+            do_read();
+        }
 
     void
         do_read()
-    {
+        {
 
-        req_ = {};
+            req_ = {};
 
-        beast::get_lowest_layer(stream_).expires_after(std::chrono::seconds(30));
+            beast::get_lowest_layer(stream_).expires_after(std::chrono::seconds(30));
 
-        http::async_read(stream_, buffer_, req_,
-            beast::bind_front_handler(
-                &session::on_read,
-                shared_from_this()));
-    }
+            http::async_read(stream_, buffer_, req_,
+                    beast::bind_front_handler(
+                        &session::on_read,
+                        shared_from_this()));
+        }
 
     void
         on_read(
-            beast::error_code ec,
-            std::size_t bytes_transferred)
-    {
-        boost::ignore_unused(bytes_transferred);
+                beast::error_code ec,
+                std::size_t bytes_transferred)
+        {
+            boost::ignore_unused(bytes_transferred);
 
-        if (ec == http::error::end_of_stream)
-            return do_close();
+            if (ec == http::error::end_of_stream)
+                return do_close();
 
-        if (ec)
-            return fail(ec, "read");
+            if (ec)
+                return fail(ec, "read");
 
-        send_response(
-            handle_request(*doc_root_, std::move(req_), app_));
-    }
+            send_response(
+                    handle_request(*doc_root_, std::move(req_), app_));
+        }
 
     void
         send_response(http::message_generator&& msg)
-    {
-        bool keep_alive = msg.keep_alive();
+        {
+            bool keep_alive = msg.keep_alive();
 
-        beast::async_write(
-            stream_,
-            std::move(msg),
-            beast::bind_front_handler(
-                &session::on_write,
-                this->shared_from_this(),
-                keep_alive));
-    }
+            beast::async_write(
+                    stream_,
+                    std::move(msg),
+                    beast::bind_front_handler(
+                        &session::on_write,
+                        this->shared_from_this(),
+                        keep_alive));
+        }
 
     void
         on_write(
-            bool keep_alive,
-            beast::error_code ec,
-            std::size_t bytes_transferred)
-    {
-        boost::ignore_unused(bytes_transferred);
-
-        if (ec)
-            return fail(ec, "write");
-
-        if (!keep_alive)
+                bool keep_alive,
+                beast::error_code ec,
+                std::size_t bytes_transferred)
         {
+            boost::ignore_unused(bytes_transferred);
 
-            return do_close();
+            if (ec)
+                return fail(ec, "write");
+
+            if (!keep_alive)
+            {
+
+                return do_close();
+            }
+
+            do_read();
         }
-
-        do_read();
-    }
 
     void
         do_close()
-    {
-        beast::get_lowest_layer(stream_).expires_after(std::chrono::seconds(30));
+        {
+            beast::get_lowest_layer(stream_).expires_after(std::chrono::seconds(30));
 
-        stream_.async_shutdown(
-            beast::bind_front_handler(
-                &session::on_shutdown,
-                shared_from_this()));
-    }
+            stream_.async_shutdown(
+                    beast::bind_front_handler(
+                        &session::on_shutdown,
+                        shared_from_this()));
+        }
 
     void
         on_shutdown(beast::error_code ec)
-    {
-        if (ec)
-            return fail(ec, "shutdown");
+        {
+            if (ec)
+                return fail(ec, "shutdown");
 
-    }
+        }
 };
 
 class listener : public std::enable_shared_from_this<listener> {
@@ -358,18 +390,18 @@ class listener : public std::enable_shared_from_this<listener> {
     std::shared_ptr<std::string const> doc_root_;
     std::shared_ptr<Application> app_;
 
-public:
+    public:
     listener(
-        net::io_context& ioc,
-        ssl::context& ctx,
-        tcp::endpoint endpoint,
-        std::shared_ptr<std::string const> const& doc_root,
-        std::shared_ptr<Application> app)
+            net::io_context& ioc,
+            ssl::context& ctx,
+            tcp::endpoint endpoint,
+            std::shared_ptr<std::string const> const& doc_root,
+            std::shared_ptr<Application> app)
         : ioc_(ioc)
-        , ctx_(ctx)
-        , acceptor_(ioc)
-        , doc_root_(doc_root)
-        , app_(app)
+          , ctx_(ctx)
+          , acceptor_(ioc)
+          , doc_root_(doc_root)
+          , app_(app)
     {
         beast::error_code ec;
 
@@ -395,7 +427,7 @@ public:
         }
 
         acceptor_.listen(
-            net::socket_base::max_listen_connections, ec);
+                net::socket_base::max_listen_connections, ec);
         if (ec)
         {
             fail(ec, "listen");
@@ -405,40 +437,40 @@ public:
 
     void
         run()
-    {
-        do_accept();
-    }
+        {
+            do_accept();
+        }
 
-private:
+    private:
     void
         do_accept()
-    {
-        acceptor_.async_accept(
-            net::make_strand(ioc_),
-            beast::bind_front_handler(
-                &listener::on_accept,
-                shared_from_this()));
-    }
+        {
+            acceptor_.async_accept(
+                    net::make_strand(ioc_),
+                    beast::bind_front_handler(
+                        &listener::on_accept,
+                        shared_from_this()));
+        }
 
     void
         on_accept(beast::error_code ec, tcp::socket socket)
-    {
-        if (ec)
         {
-            fail(ec, "accept");
-            return; // To avoid infinite loop
-        }
-        else
-        {
-            std::make_shared<session>(
-                std::move(socket),
-                ctx_,
-                doc_root_,
-                app_)->run();
-        }
+            if (ec)
+            {
+                fail(ec, "accept");
+                return; // To avoid infinite loop
+            }
+            else
+            {
+                std::make_shared<session>(
+                        std::move(socket),
+                        ctx_,
+                        doc_root_,
+                        app_)->run();
+            }
 
-        do_accept();
-    }
+            do_accept();
+        }
 };
 
 int main(int argc, char* argv[]) {
@@ -461,20 +493,20 @@ int main(int argc, char* argv[]) {
     load_server_certificate(ctx);
 
     std::make_shared<listener>(
-        ioc,
-        ctx,
-        tcp::endpoint{address, port},
-        doc_root,
-        app)->run();
+            ioc,
+            ctx,
+            tcp::endpoint{address, port},
+            doc_root,
+            app)->run();
 
     std::vector<std::thread> v;
     v.reserve(threads - 1);
     for (auto i = threads - 1; i > 0; --i)
         v.emplace_back(
-            [&ioc]
-            {
+                [&ioc]
+                {
                 ioc.run();
-            });
+                });
     ioc.run();
 
     return EXIT_SUCCESS;
