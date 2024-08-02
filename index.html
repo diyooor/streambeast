@@ -1,23 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        :root {
-            --background-color: #f4f4f9;
-            --text-color: #333;
-            --card-background: #fff;
-            --nav-background: #e0e0e0;
-            --header-footer-background: #d0d0d0;
-            --card-shadow: rgba(0, 0, 0, 0.1);
-            --button-text-color: #333;
-            --button-background-color: transparent;
-            --button-border-color: #333;
-        }
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        <style>
+:root {
+    --background-color: #f4f4f9;
+    --text-color: #333;
+    --card-background: #fff;
+    --nav-background: #e0e0e0;
+    --header-footer-background: #d0d0d0;
+    --card-shadow: rgba(0, 0, 0, 0.1);
+    --button-text-color: #333;
+    --button-background-color: transparent;
+    --button-border-color: #333;
+}
 
         body.dark-mode {
             --background-color: #121212;
@@ -51,6 +51,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            color: #555; /* Darker text color */
         }
 
         header h1 {
@@ -91,7 +92,7 @@
 
         main {
             display: grid;
-            grid-template-columns: 1fr 3fr;
+            grid-template-columns: 0.2fr 3.8fr; /* Adjusted nav width */
             grid-gap: 10px;
             padding: 20px;
             overflow-y: auto;
@@ -99,10 +100,11 @@
 
         nav {
             background-color: var(--nav-background);
-            padding: 10px;
+            padding: 5px; /* Reduced padding */
             border-right: 1px solid var(--card-shadow);
             display: flex;
             flex-direction: column;
+            transition: all 0.3s ease;
         }
 
         nav ul {
@@ -114,9 +116,10 @@
         }
 
         nav ul li {
-            padding: 10px;
+            padding: 8px; /* Reduced padding */
             text-align: center;
             border-bottom: 1px solid var(--card-shadow);
+            font-size: 14px; /* Reduced font size */
         }
 
         nav ul li:hover {
@@ -135,6 +138,7 @@
             padding: 20px;
             box-shadow: 0 0 10px var(--card-shadow);
             border-radius: 5px;
+            transition: all 0.3s ease;
         }
 
         .card {
@@ -170,8 +174,44 @@
             display: block;
         }
 
-        #test-content {
+        #test-content,
+        #contact-content {
             display: none;
+        }
+
+        .contact-form {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .contact-form input,
+        .contact-form textarea,
+        .contact-form button {
+            margin-bottom: 10px;
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid var(--card-shadow);
+            border-radius: 5px;
+            outline: none;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+
+        .contact-form button {
+            background-color: var(--button-background-color);
+            border: 2px solid var(--button-border-color);
+            color: var(--button-text-color);
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: background-color 0.3s, color 0.3s;
+            font-size: 16px;
+            border-radius: 5px;
+            width: 100%;
+        }
+
+        .contact-form button:hover {
+            background-color: var(--button-border-color);
+            color: var(--background-color);
         }
 
         @media (max-width: 768px) {
@@ -212,109 +252,191 @@
                 justify-content: center;
             }
         }
-    </style>
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const navLinks = document.querySelectorAll('nav ul li a');
-            const defaultContent = document.getElementById('default-content');
-            const testContent = document.getElementById('test-content');
-            const dataDisplay = document.querySelector('.data-display');
-            const themeToggle = document.getElementById('theme-toggle');
-            const navToggle = document.getElementById('nav-toggle');
-            const nav = document.querySelector('nav');
+        /* Scrollbar Styles */
+        ::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
 
-            // Load theme from localStorage
-            const currentTheme = localStorage.getItem('theme') || 'light';
-            if (currentTheme === 'dark') {
-                document.body.classList.add('dark-mode');
-            }
+        ::-webkit-scrollbar-track {
+            background: var(--nav-background);
+        }
 
-            navLinks.forEach(link => {
-                link.addEventListener('click', function () {
-                    const target = this.getAttribute('data-target');
+        ::-webkit-scrollbar-thumb {
+            background-color: var(--button-border-color);
+            border-radius: 10px;
+            border: 3px solid var(--nav-background);
+        }
 
-                    if (target === 'test') {
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: var(--text-color);
+        }
+
+        /* Firefox Scrollbar */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--button-border-color) var(--nav-background);
+}
+
+        </style>
+        <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                const navLinks = document.querySelectorAll('nav ul li a');
+                const defaultContent = document.getElementById('default-content');
+                const testContent = document.getElementById('test-content');
+                const contactContent = document.getElementById('contact-content');
+                const dataDisplay = document.querySelector('.data-display');
+                const themeToggle = document.getElementById('theme-toggle');
+                const navToggle = document.getElementById('nav-toggle');
+                const nav = document.querySelector('nav');
+                const main = document.querySelector('main');
+
+                // Load theme from localStorage
+                const currentTheme = localStorage.getItem('theme') || 'light';
+                if (currentTheme === 'dark') {
+                    document.body.classList.add('dark-mode');
+                }
+
+                navLinks.forEach(link => {
+                    link.addEventListener('click', function () {
+                        const target = this.getAttribute('data-target');
+
                         defaultContent.style.display = 'none';
-                        testContent.style.display = 'block';
-
-                        fetch('/api/data')
-                            .then(response => response.json())
-                            .then(data => {
-                                dataDisplay.textContent = JSON.stringify(data, null, 2);
-                            })
-                            .catch(error => {
-                                dataDisplay.textContent = 'Error fetching data: ' + error;
-                                console.error('Error fetching data:', error);
-                            });
-                    } else {
-                        defaultContent.style.display = 'block';
                         testContent.style.display = 'none';
+                        contactContent.style.display = 'none';
+
+                        if (target === 'test') {
+                            testContent.style.display = 'block';
+
+                            fetch('/api/data')
+                                .then(response => response.json())
+                                .then(data => {
+                                    dataDisplay.textContent = JSON.stringify(data, null, 2);
+                                })
+                                .catch(error => {
+                                    dataDisplay.textContent = 'Error fetching data: ' + error;
+                                    console.error('Error fetching data:', error);
+                                });
+                        } else if (target === 'contact') {
+                            contactContent.style.display = 'block';
+                        } else {
+                            defaultContent.style.display = 'block';
+                        }
+
+                        nav.style.display = 'none';
+                        main.style.gridTemplateColumns = '1fr';
+                    });
+                });
+
+                themeToggle.addEventListener('click', function () {
+                    document.body.classList.toggle('dark-mode');
+                    const newTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+                    localStorage.setItem('theme', newTheme);
+                });
+
+                navToggle.addEventListener('click', function () {
+                    if (nav.style.display === 'none' || nav.style.display === '') {
+                        nav.style.display = 'flex';
+                        main.style.gridTemplateColumns = '0.2fr 3.8fr';
+                    } else {
+                        nav.style.display = 'none';
+                        main.style.gridTemplateColumns = '1fr';
                     }
                 });
             });
+        </script>
+    </head>
 
-            themeToggle.addEventListener('click', function () {
-                document.body.classList.toggle('dark-mode');
-                const newTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
-                localStorage.setItem('theme', newTheme); // Save the theme to localStorage
-            });
+    <body>
+        <header>
+            <div class="button-container">
+                <button id="nav-toggle"><i class="fas fa-bars"></i></button>
+                <button id="theme-toggle"><i class="fas fa-power-off"></i></button>
+            </div>
+        </header>
+        <main>
+            <nav>
+                <ul>
+                    <li><a href="#" data-target="home" title="Home"><i class="fas fa-home"></i></a></li>
+                    <li><a href="#" data-target="profile" title="Profile"><i class="fas fa-user"></i></a></li>
+                    <li><a href="#" data-target="test" title="Test"><i class="fas fa-vial"></i></a></li>
+                    <li><a href="#" data-target="contact" title="Contact"><i class="fas fa-envelope"></i></a></li>
+                    <li><a href="#" data-target="help" title="Help"><i class="fas fa-question-circle"></i></a></li>
+                    <li><a href="#" data-target="settings" title="Settings"><i class="fas fa-cog"></i></a></li>
+                    <li><a href="#" data-target="logout" title="Logout"><i class="fas fa-sign-out-alt"></i></a></li>
+                </ul>
+            </nav>
+            <section id="default-content">
+                <div class="card">
+                    <h3>Welcome!</h3>
+                    <p>This is a minimal dashboard template.</p>
+                </div>
+                <div class="card">
+                    <h3>Stats</h3>
+                    <p>Here you can add your dashboard statistics.</p>
+                </div>
+                <div class="card">
+                    <h3>News</h3>
+                    <h4>Breaking News: AI Advances in 2024</h4>
+                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla vehicula tincidunt velit, nec
+                    sollicitudin magna volutpat non. Quisque sit amet lacus orci. Fusce quis nulla nec purus varius
+                    tempor. Integer vel lorem vel risus euismod eleifend. Morbi non felis et dolor laoreet eleifend.
+                    Aliquam erat volutpat.</p>
+                    <a href="#" class="read-more">Read more...</a>
+                </div>
+                <div class="card">
+                    <h3>News</h3>
+                    <h4>Breaking News: AI Advances in 2024</h4>
+                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla vehicula tincidunt velit, nec
+                    sollicitudin magna volutpat non. Quisque sit amet lacus orci. Fusce quis nulla nec purus varius
+                    tempor. Integer vel lorem vel risus euismod eleifend. Morbi non felis et dolor laoreet eleifend.
+                    Aliquam erat volutpat.</p>
+                    <a href="#" class="read-more">Read more...</a>
+                </div>
 
-            navToggle.addEventListener('click', function () {
-                if (nav.style.display === 'none' || nav.style.display === '') {
-                    nav.style.display = 'flex';
-                } else {
-                    nav.style.display = 'none';
-                }
-            });
-        });
-    </script>
-</head>
+                <div class="card">
+                    <h3>News</h3>
+                    <h4>Breaking News: AI Advances in 2024</h4>
+                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla vehicula tincidunt velit, nec
+                    sollicitudin magna volutpat non. Quisque sit amet lacus orci. Fusce quis nulla nec purus varius
+                    tempor. Integer vel lorem vel risus euismod eleifend. Morbi non felis et dolor laoreet eleifend.
+                    Aliquam erat volutpat.</p>
+                    <a href="#" class="read-more">Read more...</a>
+                </div>
 
-<body>
-    <header>
-        <div class="button-container">
-            <button id="nav-toggle"><i class="fas fa-bars"></i></button>
-            <h1></h1>
-            <button id="theme-toggle"><i class="fas fa-power-off"></i></button>
-        </div>
-    </header>
-    <main>
-        <nav>
-            <ul>
-                <li><a href="#" data-target="home">Home</a></li>
-                <li><a href="#" data-target="profile">Profile</a></li>
-                <li><a href="#" data-target="settings">Settings</a></li>
-                <li><a href="#" data-target="help">Help</a></li>
-                <li><a href="#" data-target="logout">Logout</a></li>
-                <li><a href="#" data-target="test">Test</a></li>
-            </ul>
-        </nav>
-        <section id="default-content">
-            <div class="card">
-                <h3>Welcome!</h3>
-                <p>This is a minimal dashboard template.</p>
-            </div>
-            <div class="card">
-                <h3>Stats</h3>
-                <p>Here you can add your dashboard statistics.</p>
-            </div>
-            <div class="card">
-                <h3>News</h3>
-                <p>Latest updates and news can go here.</p>
-            </div>
-        </section>
-        <section id="test-content">
-            <div class="card">
-                <h3>Test Data</h3>
-                <p>The data fetched from the server will be displayed here:</p>
-                <div class="data-display"></div>
-            </div>
-        </section>
-    </main>
-    <footer>
-        <p>&copy; 2024. All rights reserved.</p>
-    </footer>
-</body>
+                <div class="card">
+                    <h3>News</h3>
+                    <h4>Breaking News: AI Advances in 2024</h4>
+                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla vehicula tincidunt velit, nec
+                    sollicitudin magna volutpat non. Quisque sit amet lacus orci. Fusce quis nulla nec purus varius
+                    tempor. Integer vel lorem vel risus euismod eleifend. Morbi non felis et dolor laoreet eleifend.
+                    Aliquam erat volutpat.</p>
+                    <a href="#" class="read-more">Read more...</a>
+                </div>
+            </section>
+            <section id="test-content">
+                <div class="card">
+                    <h3>Test Data</h3>
+                    <p>The data fetched from the server will be displayed here:</p>
+                    <div class="data-display"></div>
+                </div>
+            </section>
+            <section id="contact-content">
+                <div class="card">
+                    <h3>Contact Us</h3>
+                    <form class="contact-form">
+                        <input type="text" placeholder="Name" required>
+                        <input type="email" placeholder="Email" required>
+                        <textarea placeholder="Message" rows="4" required></textarea>
+                        <button type="submit">Send</button>
+                    </form>
+                </div>
+            </section>
+        </main>
+        <footer>
+            <p>&copy; 2024. All rights reserved.</p>
+        </footer>
+    </body>
 
 </html>
 
