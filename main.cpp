@@ -20,13 +20,13 @@
 #include <condition_variable>
 #include <chrono>
 #include <map>
-#include <sstream> // For stringstream
-#include <iomanip> // For put_time
-#include <curl/curl.h>
-#include <string> // For std::string and std::to_string
-#include <boost/beast/core/detail/base64.hpp> // For base64 encoding
+#include <sstream> 
+#include <iomanip>
+#include <string> 
+#include <boost/beast/core/detail/base64.hpp>
 #include <thread>
-#include <boost/optional.hpp> // For optional values
+#include <boost/optional.hpp> 
+#include <unordered_map>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -34,29 +34,21 @@ namespace net = boost::asio;
 namespace ssl = boost::asio::ssl;
 using tcp = boost::asio::ip::tcp;
 
-// Adjust storage size if necessary
-constexpr size_t MAX_IMAGE_STORAGE = 1000;
-constexpr std::chrono::seconds IMAGE_TIMEOUT(10); // Timeout for clearing the cache
-
-// Helper function to URL-encode a string
 std::string url_encode(const std::string& value) {
     std::ostringstream encoded;
     encoded.fill('0');
     encoded << std::hex;
 
     for (const auto& c : value) {
-        // Keep alphanumeric and other accepted characters intact
         if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
             encoded << c;
         } else {
-            // Any other characters are percent-encoded
             encoded << '%' << std::setw(2) << int((unsigned char)c);
         }
     }
     return encoded.str();
 }
 
-// Helper function to URL-decode a string
 std::string url_decode(const std::string& value) {
     std::ostringstream decoded;
     for (std::size_t i = 0; i < value.length(); ++i) {
@@ -78,7 +70,6 @@ std::string url_decode(const std::string& value) {
     return decoded.str();
 }
 
-// Define Receipt structure
 struct Receipt {
     std::string id;
     std::string status;
@@ -89,7 +80,6 @@ struct Receipt {
     std::string payment_status;
     std::string timestamp;
 
-    // Construct a Receipt from JSON object
     static Receipt from_json(const boost::json::object& obj) {
         return Receipt{
             obj.at("id").as_string().c_str(),
@@ -104,163 +94,40 @@ struct Receipt {
     }
 };
 
-// The ClientService class manages interactions with the Stripe API
 class ClientService {
 public:
     ClientService() {}
 
-    // Create a checkout session
     std::string createCheckoutSession() {
-        try {
-            // Create a context that uses the default paths for finding CA certificates.
-            ssl::context ctx{ssl::context::tlsv12_client};
-            ctx.set_default_verify_paths();
-            ctx.set_verify_mode(ssl::verify_peer);
-            ctx.set_verify_callback([](bool preverified, ssl::verify_context& ctx) {
-                char subject_name[256];
-                X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
-                X509_NAME_oneline(X509_get_subject_name(cert), subject_name, sizeof(subject_name));
-                std::cout << "Verifying: " << subject_name << "\n";
+        std::string body = 
+            "success_url=" + url_encode("https://sattar.xyz/success?session_id={CHECKOUT_SESSION_ID}") + 
+            "&cancel_url=" + url_encode("https://sattar.xyz/cancel") +
+            "&payment_method_types[]=" + url_encode("card") +
+            "&line_items[0][price_data][currency]=" + url_encode("usd") +
+            "&line_items[0][price_data][product_data][name]=" + url_encode("T-shirt") +
+            "&line_items[0][price_data][unit_amount]=" + url_encode("2000") +
+            "&line_items[0][quantity]=" + url_encode("1") +
+            "&mode=" + url_encode("payment");
 
-                return preverified;
-            });
-
-            // Create an I/O context for the network operations.
-            net::io_context ioc;
-
-            // The domain name of the server.
-            std::string const host = "api.stripe.com";
-            std::string const port = "443";
-
-            // Create a resolver and resolve the server address.
-            tcp::resolver resolver{ioc};
-            auto const results = resolver.resolve(host, port);
-
-            // Create a socket and connect it to the server.
-            beast::ssl_stream<beast::tcp_stream> stream{ioc, ctx};
-            beast::get_lowest_layer(stream).connect(results);
-
-            // Perform the SSL handshake.
-            stream.handshake(ssl::stream_base::client);
-
-            // Create URL-encoded form body
-            std::string body = 
-                "success_url=" + url_encode("https://sattar.xyz/success?session_id={CHECKOUT_SESSION_ID}") + // Ensure session_id is returned
-                "&cancel_url=" + url_encode("https://sattar.xyz/cancel") +
-                "&payment_method_types[]=" + url_encode("card") +
-                "&line_items[0][price_data][currency]=" + url_encode("usd") +
-                "&line_items[0][price_data][product_data][name]=" + url_encode("T-shirt") +
-                "&line_items[0][price_data][unit_amount]=" + url_encode("2000") +
-                "&line_items[0][quantity]=" + url_encode("1") +
-                "&mode=" + url_encode("payment");
-
-            // Set up an HTTP POST request message.
-            http::request<http::string_body> req{http::verb::post, "/v1/checkout/sessions", 11};
-            req.set(http::field::host, host);
-            req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            req.set(http::field::content_type, "application/x-www-form-urlencoded");
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
-            req.body() = body;
-            req.prepare_payload();
-
-            // Send the HTTP request to the remote host.
-            http::write(stream, req);
-
-            // Declare a container to hold the response.
-            beast::flat_buffer buffer;
-            http::response<http::string_body> res;
-
-            // Receive the HTTP response.
-            http::read(stream, buffer, res);
-
-            // Gracefully close the stream.
-            beast::error_code ec;
-            stream.shutdown(ec);
-            if (ec == net::error::eof || ec == ssl::error::stream_truncated) {
-                ec = {};
-            }
-            if (ec) {
-                throw beast::system_error{ec};
-            }
-
-            // Return the body of the response as a string.
-            return res.body();
-        } catch (const std::exception& e) {
-            std::cerr << "Error in createCheckoutSession: " << e.what() << std::endl;
-            return "";
-        }
+        return makeRequest("/v1/checkout/sessions", http::verb::post, body);
     }
 
-    // Retrieve payment details and store the receipt
     std::string retrievePaymentDetails(const std::string& session_id) {
-        try {
-            // Setup SSL context
-            ssl::context ctx{ssl::context::tlsv12_client};
-            ctx.set_default_verify_paths();
-            ctx.set_verify_mode(ssl::verify_peer);
-            ctx.set_verify_callback([](bool preverified, ssl::verify_context& ctx) {
-                    char subject_name[256];
-                    X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
-                    X509_NAME_oneline(X509_get_subject_name(cert), subject_name, sizeof(subject_name));
-                    std::cout << "Verifying: " << subject_name << "\n";
-                    return preverified;
-                    });
+        std::string response_body = makeRequest("/v1/checkout/sessions/" + session_id, http::verb::get);
 
-            // I/O context and resolver setup
-            net::io_context ioc;
-            std::string const host = "api.stripe.com";
-            std::string const port = "443";
-            tcp::resolver resolver{ioc};
-            auto const results = resolver.resolve(host, port);
-
-            // Establish SSL connection
-            beast::ssl_stream<beast::tcp_stream> stream{ioc, ctx};
-            beast::get_lowest_layer(stream).connect(results);
-            stream.handshake(ssl::stream_base::client);
-
-            // Setup HTTP GET request for payment details
-            std::string target = "/v1/checkout/sessions/" + session_id;
-            http::request<http::empty_body> req{http::verb::get, target, 11};
-            req.set(http::field::host, host);
-            req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
-
-            // Send request and read response
-            http::write(stream, req);
-            beast::flat_buffer buffer;
-            http::response<http::string_body> res;
-            http::read(stream, buffer, res);
-
-            // Close connection gracefully
-            beast::error_code ec;
-            stream.shutdown(ec);
-            if (ec == net::error::eof || ec == ssl::error::stream_truncated) {
-                ec = {};
-            }
-            if (ec) {
-                throw beast::system_error{ec};
-            }
-
-            // Debug: Log the response
-            std::cout << "Stripe Response: " << res.body() << std::endl;
-
-            // Parse the payment details and store the receipt
-            auto response_obj = boost::json::parse(res.body()).as_object();
+        if (!response_body.empty()) {
+            auto response_obj = boost::json::parse(response_body).as_object();
             Receipt receipt = Receipt::from_json(response_obj);
 
-            {
-                std::lock_guard<std::mutex> lock(receipt_mutex_);
-                receipts_.push_back(receipt);
-            }
-
-            return res.body();
-        } catch (const std::exception& e) {
-            std::cerr << "Error in retrievePaymentDetails: " << e.what() << std::endl;
-            return "";
+            std::lock_guard<std::mutex> lock(receipt_mutex_);
+            receipts_.push_back(receipt);
+            name_index_[receipt.customer_name].push_back(receipt);
+            email_index_[receipt.customer_email].push_back(receipt);
         }
+
+        return response_body;
     }
 
-    // Retrieve a receipt by ID
     boost::optional<Receipt> getReceiptById(const std::string& id) {
         std::lock_guard<std::mutex> lock(receipt_mutex_);
         for (const auto& receipt : receipts_) {
@@ -271,7 +138,24 @@ public:
         return boost::none;
     }
 
-    // Get all stored receipts
+    std::vector<Receipt> getReceiptsByName(const std::string& name) {
+        std::lock_guard<std::mutex> lock(receipt_mutex_);
+        auto it = name_index_.find(name);
+        if (it != name_index_.end()) {
+            return it->second;
+        }
+        return {};
+    }
+
+    std::vector<Receipt> getReceiptsByEmail(const std::string& email) {
+        std::lock_guard<std::mutex> lock(receipt_mutex_);
+        auto it = email_index_.find(email);
+        if (it != email_index_.end()) {
+            return it->second;
+        }
+        return {};
+    }
+
     std::vector<Receipt> getAllReceipts() {
         std::lock_guard<std::mutex> lock(receipt_mutex_);
         return receipts_;
@@ -279,7 +163,68 @@ public:
 
 private:
     std::vector<Receipt> receipts_;
+    std::unordered_map<std::string, std::vector<Receipt>> name_index_;
+    std::unordered_map<std::string, std::vector<Receipt>> email_index_;
     std::mutex receipt_mutex_;
+
+    std::string makeRequest(const std::string& target, http::verb method, const std::string& body = "") {
+        try {
+            ssl::context ctx{ssl::context::tlsv12_client};
+            ctx.set_default_verify_paths();
+            ctx.set_verify_mode(ssl::verify_peer);
+            ctx.set_verify_callback([](bool preverified, ssl::verify_context& ctx) {
+                char subject_name[256];
+                X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
+                X509_NAME_oneline(X509_get_subject_name(cert), subject_name, sizeof(subject_name));
+                std::cout << "Verifying: " << subject_name << "\n";
+                return preverified;
+            });
+
+            net::io_context ioc;
+            std::string const host = "api.stripe.com";
+            std::string const port = "443";
+
+            tcp::resolver resolver{ioc};
+            auto const results = resolver.resolve(host, port);
+
+            beast::ssl_stream<beast::tcp_stream> stream{ioc, ctx};
+            beast::get_lowest_layer(stream).connect(results);
+
+            stream.handshake(ssl::stream_base::client);
+
+            http::request<http::string_body> req{method, target, 11};
+            req.set(http::field::host, host);
+            req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
+
+            if (!body.empty()) {
+                req.set(http::field::content_type, "application/x-www-form-urlencoded");
+                req.body() = body;
+                req.prepare_payload();
+            }
+
+            http::write(stream, req);
+
+            beast::flat_buffer buffer;
+            http::response<http::string_body> res;
+
+            http::read(stream, buffer, res);
+
+            beast::error_code ec;
+            stream.shutdown(ec);
+            if (ec == net::error::eof || ec == ssl::error::stream_truncated) {
+                ec = {};
+            }
+            if (ec) {
+                throw beast::system_error{ec};
+            }
+
+            return res.body();
+        } catch (const std::exception& e) {
+            std::cerr << "Error in makeRequest: " << e.what() << std::endl;
+            return "";
+        }
+    }
 };
 
 beast::string_view mime_type(beast::string_view path) {
@@ -335,136 +280,32 @@ std::string path_cat(beast::string_view base, beast::string_view path) {
     return result;
 }
 
-class CameraService {
-    public:
-        CameraService() : last_update_time_(std::chrono::steady_clock::now()) {
-            // Start a thread to clear cache after a timeout
-            cleanup_thread_ = std::thread([this]() { cleanup_cache(); });
-        }
-
-        ~CameraService() {
-            stop_cleanup_thread_ = true;
-            if (cleanup_thread_.joinable()) {
-                cleanup_thread_.join();
-            }
-        }
-
-        // Method to add an image to the storage with a timestamp
-        void add_image(std::vector<unsigned char>&& image_data) {
-            std::lock_guard<std::mutex> lock(storage_mutex_);
-            if (image_storage_.size() >= MAX_IMAGE_STORAGE) {
-                image_storage_.erase(image_storage_.begin()); // Maintain the circular buffer
-            }
-            auto now = std::chrono::system_clock::now();
-            std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
-            std::tm* now_tm = std::localtime(&now_time_t);
-            std::stringstream timestamp;
-            timestamp << std::put_time(now_tm, "%Y-%m-%d %H:%M:%S");
-            image_storage_[timestamp.str()] = std::move(image_data);
-            image_available_ = true;
-            last_update_time_ = std::chrono::steady_clock::now(); // Update the last update time
-            storage_cv_.notify_all();
-        }
-
-        // Method to get the latest image for streaming
-        std::vector<unsigned char> get_latest_image() {
-            std::lock_guard<std::mutex> lock(storage_mutex_);
-            if (!image_storage_.empty()) {
-                return image_storage_.rbegin()->second; // Get the most recent image
-            }
-            return {};
-        }
-
-        // Method to get the image by timestamp
-        std::vector<unsigned char> get_image_by_timestamp(const std::string& timestamp) {
-            std::lock_guard<std::mutex> lock(storage_mutex_);
-            auto it = image_storage_.find(timestamp);
-            if (it != image_storage_.end()) {
-                return it->second;
-            }
-            return {};
-        }
-
-        // Method to get a list of available timestamps
-        std::vector<std::string> get_available_timestamps() {
-            std::lock_guard<std::mutex> lock(storage_mutex_);
-            std::vector<std::string> timestamps;
-            for (const auto& entry : image_storage_) {
-                timestamps.push_back(entry.first);
-            }
-            return timestamps;
-        }
-
-    private:
-        std::map<std::string, std::vector<unsigned char>> image_storage_;
-        std::mutex storage_mutex_;
-        std::condition_variable storage_cv_;
-        bool image_available_ = false;
-        std::chrono::steady_clock::time_point last_update_time_;
-        std::thread cleanup_thread_;
-        bool stop_cleanup_thread_ = false;
-
-        void cleanup_cache() {
-            while (!stop_cleanup_thread_) {
-                std::this_thread::sleep_for(std::chrono::seconds(1)); // Check every second
-                std::lock_guard<std::mutex> lock(storage_mutex_);
-                if (image_available_ &&
-                        std::chrono::steady_clock::now() - last_update_time_ > IMAGE_TIMEOUT) {
-                    image_storage_.clear(); // Clear the cache if the timeout is reached
-                    image_available_ = false;
-                }
-            }
-        }
-};
-
 class Application {
 public:
     Application() 
-        : camera_service_(std::make_shared<CameraService>()),
-          client_service_(std::make_shared<ClientService>()) {}
+        : client_service_(std::make_shared<ClientService>()) {}
 
-    // Getter for CameraService
-    std::shared_ptr<CameraService> get_camera_service() {
-        return camera_service_;
-    }
-
-    // Handle POST image logic
-    void handle_post_image(std::vector<unsigned char>&& image_data) {
-        camera_service_->add_image(std::move(image_data));
-    }
-
-    // Handle GET latest image for streaming
-    std::vector<unsigned char> handle_get_latest_image() {
-        return camera_service_->get_latest_image();
-    }
-
-    // Handle GET image by timestamp logic
-    std::vector<unsigned char> handle_get_image_by_timestamp(const std::string& timestamp) {
-        return camera_service_->get_image_by_timestamp(timestamp);
-    }
-
-    // Handle GET available timestamps logic
-    std::vector<std::string> handle_get_available_timestamps() {
-        return camera_service_->get_available_timestamps();
-    }
-
-    // Handle creating a Stripe checkout session
     std::string handle_create_checkout_session() {
         return client_service_->createCheckoutSession();
     }
 
-    // Handle retrieving payment details
     std::string handle_retrieve_payment_details(const std::string& session_id) {
         return client_service_->retrievePaymentDetails(session_id);
     }
 
-    // Handle getting all stored receipts
     std::vector<Receipt> handle_get_all_receipts() {
         return client_service_->getAllReceipts();
     }
 
+    std::vector<Receipt> handle_get_receipts_by_name(const std::string& name) {
+        return client_service_->getReceiptsByName(name);
+    }
+
+    std::vector<Receipt> handle_get_receipts_by_email(const std::string& email) {
+        return client_service_->getReceiptsByEmail(email);
+    }
+
 private:
-    std::shared_ptr<CameraService> camera_service_;
     std::shared_ptr<ClientService> client_service_;
 };
 
@@ -483,32 +324,11 @@ http::message_generator handle_request(
         return res;
     };
 
-    if (req.method() == http::verb::post && req.target() == "/api/external") {
-        try {
-            // Extract the image from the request body
-            std::vector<unsigned char> image_data(req.body().begin(), req.body().end());
-
-            // Store the image using the application instance
-            app->handle_post_image(std::move(image_data));
-
-            boost::json::object response_obj;
-            response_obj["status"] = "success";
-            response_obj["message"] = "Image uploaded successfully";
-            std::string response_body = boost::json::serialize(response_obj);
-
-            return res_(http::status::ok, response_body, "application/json");
-        } catch (const std::exception& e) {
-            return res_(http::status::bad_request, std::string("Error uploading image: ") + e.what(), "application/json");
-        }
-    }
-
     if (req.method() == http::verb::post && req.target() == "/api/create-checkout-session") {
         try {
-            // Parse the JSON body
             auto json_body = boost::json::parse(req.body());
             auto items = json_body.at("items").as_array();
 
-            // Use the parsed JSON data (e.g., to extract item details)
             for (const auto& item : items) {
                 std::string id = item.at("id").as_string().c_str();
                 std::string name = item.at("name").as_string().c_str();
@@ -516,12 +336,10 @@ http::message_generator handle_request(
                 std::string currency = item.at("currency").as_string().c_str();
                 int quantity = item.at("quantity").as_int64();
 
-                // Debug output to verify parsing
                 std::cout << "Item ID: " << id << ", Name: " << name << ", Price: " << price 
                     << ", Currency: " << currency << ", Quantity: " << quantity << std::endl;
             }
 
-            // Use Application's method to create a checkout session
             std::string response = app->handle_create_checkout_session();
 
             boost::json::object response_obj;
@@ -538,65 +356,95 @@ http::message_generator handle_request(
         }
     }
 
-    // Handle GET request for real-time streaming
-    if (req.method() == http::verb::get && req.target() == "/stream") {
-        auto image_data = app->handle_get_latest_image();
-
-        if (!image_data.empty()) {
-            // Respond with the latest image
-            http::response<http::vector_body<unsigned char>> res{http::status::ok, req.version()};
-            res.set(http::field::content_type, "image/jpeg");
-            res.body() = std::move(image_data);
-            res.prepare_payload();
-            return res;
+    if (req.method() == http::verb::get && req.target() == "/api/receipts") {
+        try {
+            auto receipts = app->handle_get_all_receipts();
+            boost::json::array json_receipts;
+            for (const auto& receipt : receipts) {
+                boost::json::object obj;
+                obj["id"] = receipt.id;
+                obj["status"] = receipt.status;
+                obj["currency"] = receipt.currency;
+                obj["amount_total"] = receipt.amount_total;
+                obj["customer_name"] = receipt.customer_name;
+                obj["customer_email"] = receipt.customer_email;
+                obj["payment_status"] = receipt.payment_status;
+                obj["timestamp"] = receipt.timestamp;
+                json_receipts.push_back(obj);
+            }
+            boost::json::object response_obj;
+            response_obj["receipts"] = json_receipts;
+            std::string response_body = boost::json::serialize(response_obj);
+            return res_(http::status::ok, response_body, "application/json");
+        } catch (const std::exception& e) {
+            return res_(http::status::internal_server_error, std::string("Error retrieving receipts: ") + e.what(), "application/json");
         }
-
-        // No image available
-        return res_(http::status::no_content, "", "application/json");
     }
 
-    // Handle GET request for image by timestamp
-    if (req.method() == http::verb::get && req.target().starts_with("/image/")) {
-        // Extract the timestamp from the URI
-        std::string target = std::string(req.target());
-        std::string prefix = "/image/";
+    if (req.method() == http::verb::get && req.target().starts_with("/api/receipt/by-name/")) {
+        try {
+            std::string name = req.target().substr(std::string("/api/receipt/by-name/").length());
+            name = url_decode(name);
+            auto receipts = app->handle_get_receipts_by_name(name);
 
-        // Decode the URI to handle any URL-encoded characters
-        std::string timestamp_encoded = target.substr(prefix.size());
-        std::string timestamp = url_decode(timestamp_encoded);
+            if (receipts.empty()) {
+                return res_(http::status::not_found, "No receipts found for the given name", "application/json");
+            }
 
-        auto image_data = app->handle_get_image_by_timestamp(timestamp);
-
-        if (!image_data.empty()) {
-            // Respond with the image
-            http::response<http::vector_body<unsigned char>> res{http::status::ok, req.version()};
-            res.set(http::field::content_type, "image/jpeg");
-            res.body() = std::move(image_data);
-            res.prepare_payload();
-            return res;
+            boost::json::array json_receipts;
+            for (const auto& receipt : receipts) {
+                boost::json::object obj;
+                obj["id"] = receipt.id;
+                obj["status"] = receipt.status;
+                obj["currency"] = receipt.currency;
+                obj["amount_total"] = receipt.amount_total;
+                obj["customer_name"] = receipt.customer_name;
+                obj["customer_email"] = receipt.customer_email;
+                obj["payment_status"] = receipt.payment_status;
+                obj["timestamp"] = receipt.timestamp;
+                json_receipts.push_back(obj);
+            }
+            boost::json::object response_obj;
+            response_obj["receipts"] = json_receipts;
+            std::string response_body = boost::json::serialize(response_obj);
+            return res_(http::status::ok, response_body, "application/json");
+        } catch (const std::exception& e) {
+            return res_(http::status::internal_server_error, std::string("Error retrieving receipts by name: ") + e.what(), "application/json");
         }
-
-        // No image was found
-        return res_(http::status::not_found, "Image not found", "application/json");
     }
 
-    // Handle GET request for available timestamps
-    if (req.method() == http::verb::get && req.target() == "/timestamps") {
-        auto timestamps = app->handle_get_available_timestamps();
-        boost::json::array json_timestamps;
+    if (req.method() == http::verb::get && req.target().starts_with("/api/receipt/by-email/")) {
+        try {
+            std::string email = req.target().substr(std::string("/api/receipt/by-email/").length());
+            email = url_decode(email);
+            auto receipts = app->handle_get_receipts_by_email(email);
 
-        for (const auto& timestamp : timestamps) {
-            json_timestamps.emplace_back(timestamp);
+            if (receipts.empty()) {
+                return res_(http::status::not_found, "No receipts found for the given email", "application/json");
+            }
+
+            boost::json::array json_receipts;
+            for (const auto& receipt : receipts) {
+                boost::json::object obj;
+                obj["id"] = receipt.id;
+                obj["status"] = receipt.status;
+                obj["currency"] = receipt.currency;
+                obj["amount_total"] = receipt.amount_total;
+                obj["customer_name"] = receipt.customer_name;
+                obj["customer_email"] = receipt.customer_email;
+                obj["payment_status"] = receipt.payment_status;
+                obj["timestamp"] = receipt.timestamp;
+                json_receipts.push_back(obj);
+            }
+            boost::json::object response_obj;
+            response_obj["receipts"] = json_receipts;
+            std::string response_body = boost::json::serialize(response_obj);
+            return res_(http::status::ok, response_body, "application/json");
+        } catch (const std::exception& e) {
+            return res_(http::status::internal_server_error, std::string("Error retrieving receipts by email: ") + e.what(), "application/json");
         }
-
-        boost::json::object response_obj;
-        response_obj["timestamps"] = json_timestamps;
-        std::string response_body = boost::json::serialize(response_obj);
-
-        return res_(http::status::ok, response_body, "application/json");
     }
 
-    // Handle GET request for /success endpoint
     if (req.method() == http::verb::get && req.target().starts_with("/success")) {
         std::cout << "Received success request: " << req.target() << std::endl;
 
@@ -613,7 +461,6 @@ http::message_generator handle_request(
                 return res_(http::status::internal_server_error, "Failed to retrieve payment details", "application/json");
             }
 
-            // Parse payment details
             boost::json::object response_obj;
             try {
                 response_obj = boost::json::parse(payment_details).as_object();
@@ -622,16 +469,14 @@ http::message_generator handle_request(
                 return res_(http::status::internal_server_error, "Error parsing payment details", "application/json");
             }
 
-            // Store payment details as a Receipt
             try {
                 Receipt receipt = Receipt::from_json(response_obj);
-                app->handle_retrieve_payment_details(session_id); // Store in the app
+                //app->handle_retrieve_payment_details(session_id); // Store in the app
             } catch (const std::exception& e) {
                 std::cerr << "Failed to store payment details: " << e.what() << std::endl;
                 return res_(http::status::internal_server_error, "Error storing payment details", "application/json");
             }
 
-            // Redirect to the home page
             http::response<http::string_body> res{http::status::see_other, req.version()};
             res.set(http::field::location, "/");
             res.keep_alive(req.keep_alive());
@@ -641,7 +486,6 @@ http::message_generator handle_request(
         return res_(http::status::bad_request, "Session ID is missing", "application/json");
     }
 
-    // Handle GET request for cancel endpoint
     if (req.method() == http::verb::get && req.target() == "/cancel") {
         boost::json::object response_obj;
         response_obj["status"] = "cancelled";
