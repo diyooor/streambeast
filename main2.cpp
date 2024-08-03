@@ -100,140 +100,40 @@ struct Receipt {
     }
 };
 
-// The ClientService class manages interactions with the Stripe API
 class ClientService {
 public:
     ClientService() {}
 
     // Create a checkout session
     std::string createCheckoutSession() {
-        try {
-            ssl::context ctx{ssl::context::tlsv12_client};
-            ctx.set_default_verify_paths();
-            ctx.set_verify_mode(ssl::verify_peer);
-            ctx.set_verify_callback([](bool preverified, ssl::verify_context& ctx) {
-                char subject_name[256];
-                X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
-                X509_NAME_oneline(X509_get_subject_name(cert), subject_name, sizeof(subject_name));
-                std::cout << "Verifying: " << subject_name << "\n";
-                return preverified;
-            });
+        std::string body = 
+            "success_url=" + url_encode("https://sattar.xyz/success?session_id={CHECKOUT_SESSION_ID}") + 
+            "&cancel_url=" + url_encode("https://sattar.xyz/cancel") +
+            "&payment_method_types[]=" + url_encode("card") +
+            "&line_items[0][price_data][currency]=" + url_encode("usd") +
+            "&line_items[0][price_data][product_data][name]=" + url_encode("T-shirt") +
+            "&line_items[0][price_data][unit_amount]=" + url_encode("2000") +
+            "&line_items[0][quantity]=" + url_encode("1") +
+            "&mode=" + url_encode("payment");
 
-            net::io_context ioc;
-
-            std::string const host = "api.stripe.com";
-            std::string const port = "443";
-
-            tcp::resolver resolver{ioc};
-            auto const results = resolver.resolve(host, port);
-
-            beast::ssl_stream<beast::tcp_stream> stream{ioc, ctx};
-            beast::get_lowest_layer(stream).connect(results);
-
-            stream.handshake(ssl::stream_base::client);
-
-            std::string body = 
-                "success_url=" + url_encode("https://sattar.xyz/success?session_id={CHECKOUT_SESSION_ID}") + // Ensure session_id is returned
-                "&cancel_url=" + url_encode("https://sattar.xyz/cancel") +
-                "&payment_method_types[]=" + url_encode("card") +
-                "&line_items[0][price_data][currency]=" + url_encode("usd") +
-                "&line_items[0][price_data][product_data][name]=" + url_encode("T-shirt") +
-                "&line_items[0][price_data][unit_amount]=" + url_encode("2000") +
-                "&line_items[0][quantity]=" + url_encode("1") +
-                "&mode=" + url_encode("payment");
-
-            http::request<http::string_body> req{http::verb::post, "/v1/checkout/sessions", 11};
-            req.set(http::field::host, host);
-            req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            req.set(http::field::content_type, "application/x-www-form-urlencoded");
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
-            req.body() = body;
-            req.prepare_payload();
-
-            http::write(stream, req);
-
-            beast::flat_buffer buffer;
-            http::response<http::string_body> res;
-
-            http::read(stream, buffer, res);
-
-            beast::error_code ec;
-            stream.shutdown(ec);
-            if (ec == net::error::eof || ec == ssl::error::stream_truncated) {
-                ec = {};
-            }
-            if (ec) {
-                throw beast::system_error{ec};
-            }
-
-            return res.body();
-        } catch (const std::exception& e) {
-            std::cerr << "Error in createCheckoutSession: " << e.what() << std::endl;
-            return "";
-        }
+        return makeRequest("/v1/checkout/sessions", http::verb::post, body);
     }
 
     // Retrieve payment details and store the receipt
     std::string retrievePaymentDetails(const std::string& session_id) {
-        try {
-            ssl::context ctx{ssl::context::tlsv12_client};
-            ctx.set_default_verify_paths();
-            ctx.set_verify_mode(ssl::verify_peer);
-            ctx.set_verify_callback([](bool preverified, ssl::verify_context& ctx) {
-                char subject_name[256];
-                X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
-                X509_NAME_oneline(X509_get_subject_name(cert), subject_name, sizeof(subject_name));
-                std::cout << "Verifying: " << subject_name << "\n";
-                return preverified;
-            });
+        std::string response_body = makeRequest("/v1/checkout/sessions/" + session_id, http::verb::get);
 
-            net::io_context ioc;
-            std::string const host = "api.stripe.com";
-            std::string const port = "443";
-            tcp::resolver resolver{ioc};
-            auto const results = resolver.resolve(host, port);
-
-            beast::ssl_stream<beast::tcp_stream> stream{ioc, ctx};
-            beast::get_lowest_layer(stream).connect(results);
-            stream.handshake(ssl::stream_base::client);
-
-            std::string target = "/v1/checkout/sessions/" + session_id;
-            http::request<http::empty_body> req{http::verb::get, target, 11};
-            req.set(http::field::host, host);
-            req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
-
-            http::write(stream, req);
-            beast::flat_buffer buffer;
-            http::response<http::string_body> res;
-            http::read(stream, buffer, res);
-
-            beast::error_code ec;
-            stream.shutdown(ec);
-            if (ec == net::error::eof || ec == ssl::error::stream_truncated) {
-                ec = {};
-            }
-            if (ec) {
-                throw beast::system_error{ec};
-            }
-
-            //std::cout << "Stripe Response: " << res.body() << std::endl;
-
-            auto response_obj = boost::json::parse(res.body()).as_object();
+        if (!response_body.empty()) {
+            auto response_obj = boost::json::parse(response_body).as_object();
             Receipt receipt = Receipt::from_json(response_obj);
 
-            {
-                std::lock_guard<std::mutex> lock(receipt_mutex_);
-                receipts_.push_back(receipt);
-                name_index_[receipt.customer_name].push_back(receipt);
-                email_index_[receipt.customer_email].push_back(receipt);
-            }
-
-            return res.body();
-        } catch (const std::exception& e) {
-            std::cerr << "Error in retrievePaymentDetails: " << e.what() << std::endl;
-            return "";
+            std::lock_guard<std::mutex> lock(receipt_mutex_);
+            receipts_.push_back(receipt);
+            name_index_[receipt.customer_name].push_back(receipt);
+            email_index_[receipt.customer_email].push_back(receipt);
         }
+
+        return response_body;
     }
 
     // Retrieve a receipt by ID
@@ -278,6 +178,66 @@ private:
     std::unordered_map<std::string, std::vector<Receipt>> name_index_;
     std::unordered_map<std::string, std::vector<Receipt>> email_index_;
     std::mutex receipt_mutex_;
+
+    // Make an HTTP request
+    std::string makeRequest(const std::string& target, http::verb method, const std::string& body = "") {
+        try {
+            ssl::context ctx{ssl::context::tlsv12_client};
+            ctx.set_default_verify_paths();
+            ctx.set_verify_mode(ssl::verify_peer);
+            ctx.set_verify_callback([](bool preverified, ssl::verify_context& ctx) {
+                char subject_name[256];
+                X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
+                X509_NAME_oneline(X509_get_subject_name(cert), subject_name, sizeof(subject_name));
+                std::cout << "Verifying: " << subject_name << "\n";
+                return preverified;
+            });
+
+            net::io_context ioc;
+            std::string const host = "api.stripe.com";
+            std::string const port = "443";
+
+            tcp::resolver resolver{ioc};
+            auto const results = resolver.resolve(host, port);
+
+            beast::ssl_stream<beast::tcp_stream> stream{ioc, ctx};
+            beast::get_lowest_layer(stream).connect(results);
+
+            stream.handshake(ssl::stream_base::client);
+
+            http::request<http::string_body> req{method, target, 11};
+            req.set(http::field::host, host);
+            req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
+
+            if (!body.empty()) {
+                req.set(http::field::content_type, "application/x-www-form-urlencoded");
+                req.body() = body;
+                req.prepare_payload();
+            }
+
+            http::write(stream, req);
+
+            beast::flat_buffer buffer;
+            http::response<http::string_body> res;
+
+            http::read(stream, buffer, res);
+
+            beast::error_code ec;
+            stream.shutdown(ec);
+            if (ec == net::error::eof || ec == ssl::error::stream_truncated) {
+                ec = {};
+            }
+            if (ec) {
+                throw beast::system_error{ec};
+            }
+
+            return res.body();
+        } catch (const std::exception& e) {
+            std::cerr << "Error in makeRequest: " << e.what() << std::endl;
+            return "";
+        }
+    }
 };
 
 // Helper function to determine the mime type
