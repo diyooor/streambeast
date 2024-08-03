@@ -52,12 +52,6 @@
             justify-content: space-between;
             align-items: center;
             color: #555;
-            /* Darker text color */
-        }
-
-        header h1 {
-            margin: 0;
-            color: var(--text-color);
         }
 
         .button-container {
@@ -94,7 +88,6 @@
         main {
             display: grid;
             grid-template-columns: 0.2fr 3.8fr;
-            /* Adjusted nav width */
             grid-gap: 10px;
             padding: 20px;
             overflow-y: auto;
@@ -103,7 +96,6 @@
         nav {
             background-color: var(--nav-background);
             padding: 5px;
-            /* Reduced padding */
             border-right: 1px solid var(--card-shadow);
             display: flex;
             flex-direction: column;
@@ -120,11 +112,9 @@
 
         nav ul li {
             padding: 8px;
-            /* Reduced padding */
             text-align: center;
             border-bottom: 1px solid var(--card-shadow);
             font-size: 14px;
-            /* Reduced font size */
         }
 
         nav ul li:hover {
@@ -152,6 +142,10 @@
             margin-bottom: 20px;
             box-shadow: 0 0 5px var(--card-shadow);
             border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
         }
 
         .card h3 {
@@ -160,51 +154,10 @@
         }
 
         .card p {
-            margin: 0;
             color: #666;
         }
 
-        .data-display {
-            margin-top: 20px;
-            font-size: 14px;
-            white-space: pre-wrap;
-            background-color: var(--nav-background);
-            padding: 10px;
-            border-radius: 5px;
-            color: var(--text-color);
-            border: 1px solid var(--card-shadow);
-        }
-
-        #default-content {
-            display: block;
-        }
-
-        #test-content,
-        #contact-content,
-        #stream-content,
-        #gallery-content {
-            display: none;
-        }
-
-        .contact-form {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .contact-form input,
-        .contact-form textarea,
-        .contact-form button {
-            margin-bottom: 10px;
-            padding: 10px;
-            font-size: 14px;
-            border: 1px solid var(--card-shadow);
-            border-radius: 5px;
-            outline: none;
-            background-color: var(--background-color);
-            color: var(--text-color);
-        }
-
-        .contact-form button {
+        .button {
             background-color: var(--button-background-color);
             border: 2px solid var(--button-border-color);
             color: var(--button-text-color);
@@ -214,9 +167,10 @@
             font-size: 16px;
             border-radius: 5px;
             width: 100%;
+            margin-top: 10px;
         }
 
-        .contact-form button:hover {
+        .button:hover {
             background-color: var(--button-border-color);
             color: var(--background-color);
         }
@@ -226,6 +180,83 @@
             height: auto;
             border-radius: 5px;
             box-shadow: 0 0 5px var(--card-shadow);
+        }
+
+        #landing-content,
+        #stream-content,
+        #gallery-content,
+        #receipts-content {
+            display: none;
+        }
+
+        #landing-content {
+            display: block;
+        }
+
+        .landing-card-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+        }
+
+        .feature-card {
+            width: 300px;
+            margin: 10px;
+        }
+
+        .receipt-list {
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .receipt-list li {
+            padding: 10px;
+            border-bottom: 1px solid var(--card-shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.3s ease;
+        }
+
+        .receipt-list li:hover {
+            background-color: var(--button-border-color);
+        }
+
+        .receipt-list li .receipt-info {
+            text-align: left;
+        }
+
+        .receipt-list li .receipt-info h4 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .receipt-list li .receipt-info p {
+            margin: 0;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .search-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .search-container input[type="text"] {
+            padding: 8px;
+            width: calc(100% - 90px);
+            border: 2px solid var(--button-border-color);
+            border-radius: 5px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .search-container input[type="text"]:focus {
+            border-color: var(--text-color);
         }
 
         @media (max-width: 768px) {
@@ -292,21 +323,44 @@
             scrollbar-width: thin;
             scrollbar-color: var(--button-border-color) var(--nav-background);
         }
+
+        /* Popup Styles */
+        #payment-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: var(--card-background);
+            box-shadow: 0 0 10px var(--card-shadow);
+            border-radius: 5px;
+            padding: 20px;
+            z-index: 1000;
+            max-width: 80%;
+            max-height: 80%;
+            overflow: auto;
+        }
+
+        #payment-popup h3 {
+            margin-top: 0;
+        }
+
+        #payment-popup button {
+            display: block;
+            margin: 10px auto 0;
+        }
     </style>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const navLinks = document.querySelectorAll('nav ul li a');
-            const defaultContent = document.getElementById('default-content');
-            const testContent = document.getElementById('test-content');
-            const contactContent = document.getElementById('contact-content');
+            const landingContent = document.getElementById('landing-content');
             const streamContent = document.getElementById('stream-content');
             const galleryContent = document.getElementById('gallery-content');
-            const dataDisplay = document.querySelector('.data-display');
+            const receiptsContent = document.getElementById('receipts-content');
             const themeToggle = document.getElementById('theme-toggle');
             const navToggle = document.getElementById('nav-toggle');
             const nav = document.querySelector('nav');
             const main = document.querySelector('main');
-            const timestampSelectors = document.getElementById('timestamp-selectors');
             const selectedImage = document.getElementById('selected-image');
             let streamInterval;
 
@@ -320,29 +374,14 @@
                 link.addEventListener('click', function () {
                     const target = this.getAttribute('data-target');
 
-                    defaultContent.style.display = 'none';
-                    testContent.style.display = 'none';
-                    contactContent.style.display = 'none';
+                    landingContent.style.display = 'none';
                     streamContent.style.display = 'none';
                     galleryContent.style.display = 'none';
+                    receiptsContent.style.display = 'none';
 
                     clearInterval(streamInterval); // Clear any existing interval
 
-                    if (target === 'test') {
-                        testContent.style.display = 'block';
-
-                        fetch('/api/data')
-                            .then(response => response.json())
-                            .then(data => {
-                                dataDisplay.textContent = JSON.stringify(data, null, 2);
-                            })
-                            .catch(error => {
-                                dataDisplay.textContent = 'Error fetching data: ' + error;
-                                console.error('Error fetching data:', error);
-                            });
-                    } else if (target === 'contact') {
-                        contactContent.style.display = 'block';
-                    } else if (target === 'stream') {
+                    if (target === 'stream') {
                         streamContent.style.display = 'block';
 
                         // Fetch image from the /stream endpoint 5 times a second (every 200 ms)
@@ -375,8 +414,11 @@
                     } else if (target === 'gallery') {
                         galleryContent.style.display = 'block';
                         startImagePlayback();
-                    } else {
-                        defaultContent.style.display = 'block';
+                    } else if (target === 'receipts') {
+                        receiptsContent.style.display = 'block';
+                        loadAllReceipts();
+                    } else if (target === 'landing') {
+                        landingContent.style.display = 'block';
                     }
 
                     nav.style.display = 'none';
@@ -451,6 +493,153 @@
                         selectedImage.innerHTML = '<p>Image not found</p>';
                     });
             }
+
+            document.getElementById('buy-now-button').addEventListener('click', function () {
+                fetch('/api/create-checkout-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        items: [
+                            {
+                                id: 'prod_123',
+                                name: 'Exclusive T-shirt',
+                                price: 2000,
+                                currency: 'usd',
+                                quantity: 1
+                            }
+                        ]
+                    })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === "success") {
+                            const checkoutUrl = data.response.url;
+                            window.location.href = checkoutUrl; // Redirect to Stripe checkout page
+                        } else {
+                            console.error('Error creating checkout session:', data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                    });
+            });
+
+            function loadAllReceipts() {
+                fetch('/api/receipts')
+                    .then(response => response.json())
+                    .then(data => {
+                        displayReceipts(data.receipts);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching receipts:', error);
+                    });
+            }
+
+            function loadReceiptsByName(name) {
+                fetch(`/api/receipt/by-name/${encodeURIComponent(name)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        displayReceipts(data.receipts);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching receipts by name:', error);
+                    });
+            }
+
+            function loadReceiptsByEmail(email) {
+                fetch(`/api/receipt/by-email/${encodeURIComponent(email)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        displayReceipts(data.receipts);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching receipts by email:', error);
+                    });
+            }
+
+            function displayReceipts(receipts) {
+                const receiptList = document.getElementById('receipt-list');
+                receiptList.innerHTML = '';
+
+                if (receipts.length === 0) {
+                    receiptList.innerHTML = '<li>No receipts found</li>';
+                    return;
+                }
+
+                receipts.forEach(receipt => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <div class="receipt-info">
+                            <h4>${receipt.customer_name} (${receipt.customer_email})</h4>
+                            <p>Status: ${receipt.payment_status}, Amount: $${(receipt.amount_total / 100).toFixed(2)}</p>
+                        </div>
+                    `;
+                    receiptList.appendChild(li);
+                });
+            }
+
+            // Function to parse cookie
+            function getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+            }
+
+            // Display payment popup if payment details exist
+            const paymentDetailsCookie = getCookie('payment_details');
+            if (paymentDetailsCookie) {
+                try {
+                    const paymentDetails = JSON.parse(decodeURIComponent(paymentDetailsCookie));
+                    showPaymentPopup(paymentDetails);
+                    // Clean URL and remove cookie after use
+                    document.cookie = 'payment_details=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (e) {
+                    console.error('Error parsing payment details:', e);
+                }
+            }
+
+            function showPaymentPopup(details) {
+                const popup = document.getElementById('payment-popup');
+                popup.innerHTML = `
+                    <h3>Payment Receipt</h3>
+                    <p><strong>Status:</strong> ${details.payment_status}</p>
+                    <p><strong>Amount Total:</strong> $${(details.amount_total / 100).toFixed(2)}</p>
+                    <p><strong>Currency:</strong> ${details.currency.toUpperCase()}</p>
+                    <p><strong>Payment Status:</strong> ${details.payment_status}</p>
+                    <p><strong>Customer Name:</strong> ${details.customer_name || 'N/A'}</p>
+                    <p><strong>Customer Email:</strong> ${details.customer_email || 'N/A'}</p>
+                    <button id="close-popup" class="button">Close</button>
+                `;
+                popup.style.display = 'block';
+
+                document.getElementById('close-popup').addEventListener('click', function () {
+                    popup.style.display = 'none';
+                });
+            }
+
+            // Handle search functionality
+            const searchInput = document.getElementById('search-input');
+            const searchButton = document.getElementById('search-button');
+
+            searchButton.addEventListener('click', function () {
+                const query = searchInput.value.trim();
+                const searchType = document.querySelector('input[name="search-type"]:checked').value;
+
+                if (searchType === 'name') {
+                    loadReceiptsByName(query);
+                } else if (searchType === 'email') {
+                    loadReceiptsByEmail(query);
+                }
+            });
+
+            searchInput.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    searchButton.click();
+                }
+            });
         });
     </script>
 </head>
@@ -465,82 +654,32 @@
     <main>
         <nav>
             <ul>
-                <li><a href="#" data-target="home" title="Home"><i class="fas fa-home"></i></a></li>
-                <li><a href="#" data-target="profile" title="Profile"><i class="fas fa-user"></i></a></li>
-                <li><a href="#" data-target="test" title="Test"><i class="fas fa-vial"></i></a></li>
-                <li><a href="#" data-target="contact" title="Contact"><i class="fas fa-envelope"></i></a></li>
+                <li><a href="#" data-target="landing" title="Landing"><i class="fas fa-home"></i></a></li>
                 <li><a href="#" data-target="stream" title="Stream"><i class="fas fa-play-circle"></i></a></li>
-                <!-- New Gallery Tab -->
                 <li><a href="#" data-target="gallery" title="Gallery"><i class="fas fa-images"></i></a></li>
-                <li><a href="#" data-target="help" title="Help"><i class="fas fa-question-circle"></i></a></li>
-                <li><a href="#" data-target="settings" title="Settings"><i class="fas fa-cog"></i></a></li>
-                <li><a href="#" data-target="logout" title="Logout"><i class="fas fa-sign-out-alt"></i></a></li>
+                <li><a href="#" data-target="receipts" title="Receipts"><i class="fas fa-receipt"></i></a></li>
             </ul>
         </nav>
-        <section id="default-content">
-            <div class="card">
-                <h3>Welcome!</h3>
-                <p>This is a minimal dashboard template.</p>
-            </div>
-            <div class="card">
-                <h3>Stats</h3>
-                <p>Here you can add your dashboard statistics.</p>
-            </div>
-            <div class="card">
-                <h3>News</h3>
-                <h4>Breaking News: AI Advances in 2024</h4>
-                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla vehicula tincidunt velit, nec
-                    sollicitudin magna volutpat non. Quisque sit amet lacus orci. Fusce quis nulla nec purus varius
-                    tempor. Integer vel lorem vel risus euismod eleifend. Morbi non felis et dolor laoreet eleifend.
-                    Aliquam erat volutpat.</p>
-                <a href="#" class="read-more">Read more...</a>
-            </div>
-            <div class="card">
-                <h3>News</h3>
-                <h4>Breaking News: AI Advances in 2024</h4>
-                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla vehicula tincidunt velit, nec
-                    sollicitudin magna volutpat non. Quisque sit amet lacus orci. Fusce quis nulla nec purus varius
-                    tempor. Integer vel lorem vel risus euismod eleifend. Morbi non felis et dolor laoreet eleifend.
-                    Aliquam erat volutpat.</p>
-                <a href="#" class="read-more">Read more...</a>
-            </div>
-
-            <div class="card">
-                <h3>News</h3>
-                <h4>Breaking News: AI Advances in 2024</h4>
-                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla vehicula tincidunt velit, nec
-                    sollicitudin magna volutpat non. Quisque sit amet lacus orci. Fusce quis nulla nec purus varius
-                    tempor. Integer vel lorem vel risus euismod eleifend. Morbi non felis et dolor laoreet eleifend.
-                    Aliquam erat volutpat.</p>
-                <a href="#" class="read-more">Read more...</a>
-            </div>
-
-            <div class="card">
-                <h3>News</h3>
-                <h4>Breaking News: AI Advances in 2024</h4>
-                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla vehicula tincidunt velit, nec
-                    sollicitudin magna volutpat non. Quisque sit amet lacus orci. Fusce quis nulla nec purus varius
-                    tempor. Integer vel lorem vel risus euismod eleifend. Morbi non felis et dolor laoreet eleifend.
-                    Aliquam erat volutpat.</p>
-                <a href="#" class="read-more">Read more...</a>
-            </div>
-        </section>
-        <section id="test-content">
-            <div class="card">
-                <h3>Test Data</h3>
-                <p>The data fetched from the server will be displayed here:</p>
-                <div class="data-display"></div>
-            </div>
-        </section>
-        <section id="contact-content">
-            <div class="card">
-                <h3>Contact Us</h3>
-                <form class="contact-form">
-                    <input type="text" placeholder="Name" required>
-                    <input type="email" placeholder="Email" required>
-                    <textarea placeholder="Message" rows="4" required></textarea>
-                    <button type="submit">Send</button>
-                </form>
+        <section id="landing-content">
+            <div class="landing-card-container">
+                <div class="card feature-card">
+                    <h3>Latest News</h3>
+                    <p>Stay updated with the latest features added.</p>
+                </div>
+                <div class="card feature-card">
+                    <h3>Live Stream</h3>
+                    <p>Experience real-time streaming with our state-of-the-art technology.</p>
+                </div>
+                <div class="card feature-card">
+                    <h3>Image Gallery</h3>
+                    <p>Replay your live stream with video on demand</p>
+                </div>
+                <!-- New Item Card -->
+                <div class="card feature-card">
+                    <h3>Exclusive T-shirt</h3>
+                    <p>Price: $20.00</p>
+                    <button id="buy-now-button" class="button">Buy Now</button>
+                </div>
             </div>
         </section>
         <section id="stream-content">
@@ -557,11 +696,33 @@
                 <div id="selected-image"></div>
             </div>
         </section>
-
+        <section id="receipts-content">
+            <div class="card">
+                <h3>Receipts</h3>
+                <div class="search-container">
+                    <input type="text" id="search-input" placeholder="Search by name or email">
+                    <div>
+                        <label>
+                            <input type="radio" name="search-type" value="name" checked> Name
+                        </label>
+                        <label>
+                            <input type="radio" name="search-type" value="email"> Email
+                        </label>
+                        <button id="search-button" class="button">Search</button>
+                    </div>
+                </div>
+                <ul id="receipt-list" class="receipt-list"></ul>
+            </div>
+        </section>
     </main>
     <footer>
         <p>&copy; 2024. All rights reserved.</p>
     </footer>
+
+    <!-- Popup for Payment Receipt -->
+    <div id="payment-popup">
+        <!-- Content will be populated by JavaScript -->
+    </div>
 </body>
 
 </html>
