@@ -509,7 +509,7 @@ http::message_generator handle_request(
     std::string path = path_cat(doc_root, req.target());
     std::string target = req.target();
     if (req.target().back() == '/') {
-        path.append("index.html");
+        path.append("index2.html");
     }
     beast::error_code ec;
     http::file_body::value_type body;

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>Sattar</title>
+    <style>
+        /* Ensure box-sizing includes padding and border in the element's total width and height */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        /* Body styling with overflow-x hidden */
+        body {
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: #f4f4f9; /* Directly set light mode colors */
+            color: #333; /* Directly set light mode colors */
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden; /* Prevent horizontal scrolling */
+        }
+
+        header,
+        footer {
+            background-color: #f4f4f9; /* Directly set light mode colors */
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1); /* Directly set light mode colors */
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between; /* Changed to space-between for layout */
+            align-items: center;
+            color: #555;
+            width: 100%;
+            z-index: 1000; /* Ensure header and footer are above other content */
+        }
+
+        header {
+            top: 0; /* Fix header to the top */
+            padding: 10px 20px; /* Add some padding for better spacing */
+            position: fixed; /* Make header fixed */
+        }
+
+        footer {
+            border-top: 1px solid rgba(0, 0, 0, 0.1); /* Add border at the top of the footer */
+            margin-top: auto; /* Push footer to the bottom if the content is short */
+        }
+
+        #nav-toggle {
+            background-color: transparent; /* Directly set light mode colors */
+            border: none; /* Removed border */
+            color: #333; /* Directly set light mode colors */
+            padding: 0;
+            cursor: pointer;
+            transition: color 0.3s;
+            font-size: 24px; /* Adjusted font size for better visibility */
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #nav-toggle:hover {
+            color: #555; /* Changed hover color */
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 500;
+            color: #333;
+            text-decoration: none;
+        }
+
+        .logo:hover {
+            color: #555; /* Changed hover color for the logo */
+        }
+
+        main {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-y: auto;
+            width: 100%;
+            max-width: 100%; /* Prevents overflowing the viewport width */
+            box-sizing: border-box; /* Include padding in width */
+            flex: 1 0 auto; /* Allow main content to grow and shrink */
+            margin-top: 60px; /* Leave space for the fixed header */
+            margin-bottom: 40px; /* Leave space for the fixed footer */
+        }
+
+        section {
+            background-color: #fff; /* Directly set light mode colors */
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Directly set light mode colors */
+            border-radius: 5px;
+            transition: all 0.3s ease;
+            width: 100%;
+            max-width: 100%; /* Prevents overflowing the viewport width */
+            margin-bottom: 20px;
+            box-sizing: border-box; /* Include padding in width */
+        }
+
+        .card-container {
+            display: grid;
+            grid-template-columns: 1fr; /* Default to 1 column */
+            gap: 20px;
+            width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .card-container {
+                grid-template-columns: repeat(2, 1fr); /* 2 columns on larger screens */
+            }
+        }
+
+        .card {
+            background-color: #fff; /* Directly set light mode colors */
+            padding: 15px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1); /* Directly set light mode colors */
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box; /* Include padding in width */
+        }
+
+        .card h3 {
+            margin: 0 0 10px;
+            color: #333; /* Directly set light mode colors */
+        }
+
+        .card-item {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            text-align: left;
+            width: 100%;
+        }
+
+        .card-item h4 {
+            margin: 0 0 5px;
+            color: #333; /* Directly set light mode colors */
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .card-item p {
+            margin: 0 0 10px;
+            color: #666; /* Directly set light mode colors */
+            font-size: 14px;
+        }
+
+        .card-item button {
+            background-color: #333; /* Button background color */
+            color: #fff; /* Button text color */
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s;
+            font-size: 14px;
+            width: auto; /* Button width */
+        }
+
+        .card-item button:hover {
+            background-color: #555; /* Hover background color */
+            transform: scale(1.05); /* Slightly enlarge button on hover */
+        }
+
+        .card-item input[type="text"],
+        .card-item select,
+        .card-item input[type="date"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        .card-item select {
+            appearance: none; /* Remove default styling */
+            background: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 5"><path fill="none" stroke="%23333" stroke-width=".5" d="M2 0L0 2h4zm0 5L0 3h4z"/></svg>') no-repeat right 10px center;
+            background-size: 8px 10px;
+        }
+
+        .card-item ul {
+            list-style-type: disc; /* Use a disc for list items */
+            padding-left: 20px; /* Indent list */
+            margin: 0 0 10px;
+        }
+
+        .card-item ul li {
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .pagination button {
+            background-color: #333;
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            margin: 0 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .pagination button:hover {
+            background-color: #555;
+        }
+
+        .pagination button.active {
+            background-color: #555;
+        }
+
+        @media (max-width: 768px) {
+            header {
+                flex-direction: row; /* Ensure row layout for mobile */
+                justify-content: space-between; /* Space between home and logo */
+                padding: 10px 15px; /* Adjust padding */
+            }
+
+            main {
+                padding: 10px;
+            }
+
+            .card {
+                width: 100%; /* Ensure card width is 100% in mobile view */
+            }
+        }
+
+        /* Scrollbar Styles */
+        ::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #e0e0e0; /* Directly set light mode colors */
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background-color: #333; /* Directly set light mode colors */
+            border-radius: 10px;
+            border: 3px solid #e0e0e0; /* Directly set light mode colors */
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: #333; /* Directly set light mode colors */
+        }
+
+        /* Firefox Scrollbar */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #333 #e0e0e0; /* Directly set light mode colors */
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <button id="nav-toggle"><i class="fas fa-home"></i></button>
+        <a href="#" class="logo">Sattar</a>
+    </header>
+    <main>
+        <section id="landing-content">
+            <div class="card-container">
+                <div class="card feature-card">
+                    <h3>Latest News</h3>
+                    <div class="card-item">
+                        <h4>Exciting New Features Launched!</h4>
+                        <p>Discover the latest updates to our platform, including new streaming capabilities and enhanced user interface.</p>
+                        <ul>
+                            <li>New design improvements</li>
+                            <li>Improved performance</li>
+                            <li>Bug fixes</li>
+                        </ul>
+                        <button>Read More</button>
+                    </div>
+                </div>
+                <div class="card feature-card">
+                    <h3>UI Components Demo</h3>
+                    <div class="card-item" id="component-1">
+                        <h4>Button Example</h4>
+                        <p>This is a styled button:</p>
+                        <button>Styled Button</button>
+                    </div>
+                    <div class="card-item" id="component-2" style="display:none;">
+                        <h4>Text Field Example</h4>
+                        <p>This is a styled text input field:</p>
+                        <input type="text" placeholder="Enter text here" />
+                    </div>
+                    <div class="card-item" id="component-3" style="display:none;">
+                        <h4>Dropdown Example</h4>
+                        <p>This is a styled dropdown list:</p>
+                        <select>
+                            <option>Option 1</option>
+                            <option>Option 2</option>
+                            <option>Option 3</option>
+                        </select>
+                    </div>
+                    <div class="card-item" id="component-4" style="display:none;">
+                        <h4>Calendar Example</h4>
+                        <p>This is a styled calendar input:</p>
+                        <input type="date" />
+                    </div>
+                    <div class="pagination">
+                        <button class="pagination-button" data-target="#component-1">1</button>
+                        <button class="pagination-button" data-target="#component-2">2</button>
+                        <button class="pagination-button" data-target="#component-3">3</button>
+                        <button class="pagination-button" data-target="#component-4">4</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>Sattar &copy; 2024. All rights reserved.</p>
+    </footer>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const paginationButtons = document.querySelectorAll('.pagination-button');
+            const cardItems = document.querySelectorAll('.card-item');
+
+            paginationButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    // Hide all card items
+                    cardItems.forEach(item => item.style.display = 'none');
+
+                    // Show the selected card item
+                    const target = this.getAttribute('data-target');
+                    document.querySelector(target).style.display = 'block';
+
+                    // Remove active class from all buttons
+                    paginationButtons.forEach(btn => btn.classList.remove('active'));
+
+                    // Add active class to the clicked button
+                    this.classList.add('active');
+                });
+            });
+
+            // Show the first card item by default
+            document.querySelector('#component-1').style.display = 'block';
+            document.querySelector('.pagination-button[data-target="#component-1"]').classList.add('active');
+        });
+    </script>
+</body>
+</html>
+
