@@ -1,4 +1,4 @@
-#include <boost/json.hpp>
+
 #include <boost/json/src.hpp>
 #include "server_certificate.hpp"
 #include <boost/beast/core.hpp>
@@ -7,6 +7,7 @@
 #include <boost/beast/version.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/strand.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/config.hpp>
 #include <algorithm>
 #include <cstdlib>
@@ -20,20 +21,27 @@
 #include <condition_variable>
 #include <chrono>
 #include <map>
-#include <sstream> 
+#include <sstream>
 #include <iomanip>
-#include <string> 
+#include <string>
 #include <boost/beast/core/detail/base64.hpp>
 #include <thread>
-#include <boost/optional.hpp> 
+#include <boost/optional.hpp>
 #include <unordered_map>
-
+#include <atomic>
+#include <ctime>
+#include <sys/types.h>
+#include <sys/statvfs.h>
+#include <sys/sysinfo.h>
+#include <boost/json.hpp>
+#include <sw/redis++/redis++.h>
 namespace beast = boost::beast;
 namespace http = beast::http;
 namespace net = boost::asio;
 namespace ssl = boost::asio::ssl;
 using tcp = boost::asio::ip::tcp;
 
+// Utility functions for URL encoding and decoding
 std::string url_encode(const std::string& value) {
     std::ostringstream encoded;
     encoded.fill('0');
@@ -70,163 +78,7 @@ std::string url_decode(const std::string& value) {
     return decoded.str();
 }
 
-struct Receipt {
-    std::string id;
-    std::string status;
-    std::string currency;
-    int amount_total;
-    std::string customer_name;
-    std::string customer_email;
-    std::string payment_status;
-    std::string timestamp;
-
-    static Receipt from_json(const boost::json::object& obj) {
-        return Receipt{
-            obj.at("id").as_string().c_str(),
-            obj.at("status").as_string().c_str(),
-            obj.at("currency").as_string().c_str(),
-            static_cast<int>(obj.at("amount_total").as_int64()),
-            obj.at("customer_details").as_object().at("name").as_string().c_str(),
-            obj.at("customer_details").as_object().at("email").as_string().c_str(),
-            obj.at("payment_status").as_string().c_str(),
-            std::to_string(obj.at("created").as_int64())
-        };
-    }
-};
-
-class ClientService {
-public:
-    ClientService() {}
-
-    std::string createCheckoutSession() {
-        std::string body = 
-            "success_url=" + url_encode("https://sattar.xyz/success?session_id={CHECKOUT_SESSION_ID}") + 
-            "&cancel_url=" + url_encode("https://sattar.xyz/cancel") +
-            "&payment_method_types[]=" + url_encode("card") +
-            "&line_items[0][price_data][currency]=" + url_encode("usd") +
-            "&line_items[0][price_data][product_data][name]=" + url_encode("T-shirt") +
-            "&line_items[0][price_data][unit_amount]=" + url_encode("2000") +
-            "&line_items[0][quantity]=" + url_encode("1") +
-            "&mode=" + url_encode("payment");
-
-        return makeRequest("/v1/checkout/sessions", http::verb::post, body);
-    }
-
-    std::string retrievePaymentDetails(const std::string& session_id) {
-        std::string response_body = makeRequest("/v1/checkout/sessions/" + session_id, http::verb::get);
-
-        if (!response_body.empty()) {
-            auto response_obj = boost::json::parse(response_body).as_object();
-            Receipt receipt = Receipt::from_json(response_obj);
-
-            std::lock_guard<std::mutex> lock(receipt_mutex_);
-            receipts_.push_back(receipt);
-            name_index_[receipt.customer_name].push_back(receipt);
-            email_index_[receipt.customer_email].push_back(receipt);
-        }
-
-        return response_body;
-    }
-
-    boost::optional<Receipt> getReceiptById(const std::string& id) {
-        std::lock_guard<std::mutex> lock(receipt_mutex_);
-        for (const auto& receipt : receipts_) {
-            if (receipt.id == id) {
-                return receipt;
-            }
-        }
-        return boost::none;
-    }
-
-    std::vector<Receipt> getReceiptsByName(const std::string& name) {
-        std::lock_guard<std::mutex> lock(receipt_mutex_);
-        auto it = name_index_.find(name);
-        if (it != name_index_.end()) {
-            return it->second;
-        }
-        return {};
-    }
-
-    std::vector<Receipt> getReceiptsByEmail(const std::string& email) {
-        std::lock_guard<std::mutex> lock(receipt_mutex_);
-        auto it = email_index_.find(email);
-        if (it != email_index_.end()) {
-            return it->second;
-        }
-        return {};
-    }
-
-    std::vector<Receipt> getAllReceipts() {
-        std::lock_guard<std::mutex> lock(receipt_mutex_);
-        return receipts_;
-    }
-
-private:
-    std::vector<Receipt> receipts_;
-    std::unordered_map<std::string, std::vector<Receipt>> name_index_;
-    std::unordered_map<std::string, std::vector<Receipt>> email_index_;
-    std::mutex receipt_mutex_;
-
-    std::string makeRequest(const std::string& target, http::verb method, const std::string& body = "") {
-        try {
-            ssl::context ctx{ssl::context::tlsv12_client};
-            ctx.set_default_verify_paths();
-            ctx.set_verify_mode(ssl::verify_peer);
-            ctx.set_verify_callback([](bool preverified, ssl::verify_context& ctx) {
-                char subject_name[256];
-                X509* cert = X509_STORE_CTX_get_current_cert(ctx.native_handle());
-                X509_NAME_oneline(X509_get_subject_name(cert), subject_name, sizeof(subject_name));
-                std::cout << "Verifying: " << subject_name << "\n";
-                return preverified;
-            });
-
-            net::io_context ioc;
-            std::string const host = "api.stripe.com";
-            std::string const port = "443";
-
-            tcp::resolver resolver{ioc};
-            auto const results = resolver.resolve(host, port);
-
-            beast::ssl_stream<beast::tcp_stream> stream{ioc, ctx};
-            beast::get_lowest_layer(stream).connect(results);
-
-            stream.handshake(ssl::stream_base::client);
-
-            http::request<http::string_body> req{method, target, 11};
-            req.set(http::field::host, host);
-            req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
-
-            if (!body.empty()) {
-                req.set(http::field::content_type, "application/x-www-form-urlencoded");
-                req.body() = body;
-                req.prepare_payload();
-            }
-
-            http::write(stream, req);
-
-            beast::flat_buffer buffer;
-            http::response<http::string_body> res;
-
-            http::read(stream, buffer, res);
-
-            beast::error_code ec;
-            stream.shutdown(ec);
-            if (ec == net::error::eof || ec == ssl::error::stream_truncated) {
-                ec = {};
-            }
-            if (ec) {
-                throw beast::system_error{ec};
-            }
-
-            return res.body();
-        } catch (const std::exception& e) {
-            std::cerr << "Error in makeRequest: " << e.what() << std::endl;
-            return "";
-        }
-    }
-};
-
+// Function to determine MIME type based on file extension
 beast::string_view mime_type(beast::string_view path) {
     using beast::iequals;
     auto const ext = [&path] {
@@ -259,6 +111,7 @@ beast::string_view mime_type(beast::string_view path) {
     return "application/text";
 }
 
+// Function to concatenate base path with relative path
 std::string path_cat(beast::string_view base, beast::string_view path) {
     if (base.empty())
         return std::string(path);
@@ -280,40 +133,65 @@ std::string path_cat(beast::string_view base, beast::string_view path) {
     return result;
 }
 
-class Application {
-public:
-    Application() 
-        : client_service_(std::make_shared<ClientService>()) {}
+// SystemService class to track server status
+class SystemService {
+    public:
+        SystemService() : start_time_(std::chrono::steady_clock::now()), request_count_(0) {}
 
-    std::string handle_create_checkout_session() {
-        return client_service_->createCheckoutSession();
-    }
+        void increment_request_count() {
+            std::lock_guard<std::mutex> lock(mutex_);
+            ++request_count_;
+        }
 
-    std::string handle_retrieve_payment_details(const std::string& session_id) {
-        return client_service_->retrievePaymentDetails(session_id);
-    }
+        boost::json::object get_status() const {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - start_time_).count();
 
-    std::vector<Receipt> handle_get_all_receipts() {
-        return client_service_->getAllReceipts();
-    }
+            boost::json::object status;
+            status["uptime"] = uptime;
+            status["request_count"] = request_count_;
 
-    std::vector<Receipt> handle_get_receipts_by_name(const std::string& name) {
-        return client_service_->getReceiptsByName(name);
-    }
+            // Add memory usage
+            struct sysinfo memInfo;
+            sysinfo(&memInfo);
+            status["total_memory"] = memInfo.totalram * memInfo.mem_unit / (1024 * 1024); // in MB
+            status["free_memory"] = memInfo.freeram * memInfo.mem_unit / (1024 * 1024); // in MB
 
-    std::vector<Receipt> handle_get_receipts_by_email(const std::string& email) {
-        return client_service_->getReceiptsByEmail(email);
-    }
+            // Add disk space
+            struct statvfs diskInfo;
+            statvfs("/", &diskInfo);
+            unsigned long totalDisk = diskInfo.f_blocks * diskInfo.f_frsize;
+            unsigned long freeDisk = diskInfo.f_bfree * diskInfo.f_frsize;
+            status["total_disk"] = totalDisk / (1024 * 1024); // in MB
+            status["free_disk"] = freeDisk / (1024 * 1024); // in MB
 
-private:
-    std::shared_ptr<ClientService> client_service_;
+            return status;
+        }
+
+    private:
+        std::chrono::steady_clock::time_point start_time_;
+        mutable std::mutex mutex_;
+        std::size_t request_count_;
 };
 
+// Application class to hold application services
+class Application {
+    public:
+        Application() : system_service_(std::make_shared<SystemService>()) {}
+
+        std::shared_ptr<SystemService> get_system_service() { return system_service_; }
+
+    private:
+        std::shared_ptr<SystemService> system_service_;
+};
+
+// Function to handle GET requests
 template <class Body, class Allocator>
-http::message_generator handle_request(
-    beast::string_view doc_root,
-    http::request<Body, http::basic_fields<Allocator>>&& req,
-    std::shared_ptr<Application> app) {
+http::message_generator handle_get_request(
+        beast::string_view doc_root,
+        http::request<Body, http::basic_fields<Allocator>>&& req,
+        std::shared_ptr<Application> app) {
 
     auto const res_ = [&req](http::status status, const std::string& body, const std::string& content_type = "application/json") {
         http::response<http::string_body> res{status, req.version()};
@@ -324,190 +202,19 @@ http::message_generator handle_request(
         return res;
     };
 
-    if (req.method() == http::verb::post && req.target() == "/api/create-checkout-session") {
-        try {
-            auto json_body = boost::json::parse(req.body());
-            auto items = json_body.at("items").as_array();
-
-            for (const auto& item : items) {
-                std::string id = item.at("id").as_string().c_str();
-                std::string name = item.at("name").as_string().c_str();
-                int price = item.at("price").as_int64();
-                std::string currency = item.at("currency").as_string().c_str();
-                int quantity = item.at("quantity").as_int64();
-
-                std::cout << "Item ID: " << id << ", Name: " << name << ", Price: " << price 
-                    << ", Currency: " << currency << ", Quantity: " << quantity << std::endl;
-            }
-
-            std::string response = app->handle_create_checkout_session();
-
-            boost::json::object response_obj;
-            response_obj["status"] = "success";
-            response_obj["message"] = "Checkout session created successfully";
-            response_obj["response"] = boost::json::parse(response); // Parse JSON response from Stripe
-            std::string response_body = boost::json::serialize(response_obj);
-
-            return res_(http::status::ok, response_body, "application/json");
-        } catch (const boost::system::system_error& e) {
-            return res_(http::status::bad_request, std::string("Error parsing JSON: ") + e.what(), "application/json");
-        } catch (const std::exception& e) {
-            return res_(http::status::bad_request, std::string("Error creating checkout session: ") + e.what(), "application/json");
-        }
-    }
-
-    if (req.method() == http::verb::get && req.target() == "/api/receipts") {
-        try {
-            auto receipts = app->handle_get_all_receipts();
-            boost::json::array json_receipts;
-            for (const auto& receipt : receipts) {
-                boost::json::object obj;
-                obj["id"] = receipt.id;
-                obj["status"] = receipt.status;
-                obj["currency"] = receipt.currency;
-                obj["amount_total"] = receipt.amount_total;
-                obj["customer_name"] = receipt.customer_name;
-                obj["customer_email"] = receipt.customer_email;
-                obj["payment_status"] = receipt.payment_status;
-                obj["timestamp"] = receipt.timestamp;
-                json_receipts.push_back(obj);
-            }
-            boost::json::object response_obj;
-            response_obj["receipts"] = json_receipts;
-            std::string response_body = boost::json::serialize(response_obj);
-            return res_(http::status::ok, response_body, "application/json");
-        } catch (const std::exception& e) {
-            return res_(http::status::internal_server_error, std::string("Error retrieving receipts: ") + e.what(), "application/json");
-        }
-    }
-
-    if (req.method() == http::verb::get && req.target().starts_with("/api/receipt/by-name/")) {
-        try {
-            std::string name = req.target().substr(std::string("/api/receipt/by-name/").length());
-            name = url_decode(name);
-            auto receipts = app->handle_get_receipts_by_name(name);
-
-            if (receipts.empty()) {
-                return res_(http::status::not_found, "No receipts found for the given name", "application/json");
-            }
-
-            boost::json::array json_receipts;
-            for (const auto& receipt : receipts) {
-                boost::json::object obj;
-                obj["id"] = receipt.id;
-                obj["status"] = receipt.status;
-                obj["currency"] = receipt.currency;
-                obj["amount_total"] = receipt.amount_total;
-                obj["customer_name"] = receipt.customer_name;
-                obj["customer_email"] = receipt.customer_email;
-                obj["payment_status"] = receipt.payment_status;
-                obj["timestamp"] = receipt.timestamp;
-                json_receipts.push_back(obj);
-            }
-            boost::json::object response_obj;
-            response_obj["receipts"] = json_receipts;
-            std::string response_body = boost::json::serialize(response_obj);
-            return res_(http::status::ok, response_body, "application/json");
-        } catch (const std::exception& e) {
-            return res_(http::status::internal_server_error, std::string("Error retrieving receipts by name: ") + e.what(), "application/json");
-        }
-    }
-
-    if (req.method() == http::verb::get && req.target().starts_with("/api/receipt/by-email/")) {
-        try {
-            std::string email = req.target().substr(std::string("/api/receipt/by-email/").length());
-            email = url_decode(email);
-            auto receipts = app->handle_get_receipts_by_email(email);
-
-            if (receipts.empty()) {
-                return res_(http::status::not_found, "No receipts found for the given email", "application/json");
-            }
-
-            boost::json::array json_receipts;
-            for (const auto& receipt : receipts) {
-                boost::json::object obj;
-                obj["id"] = receipt.id;
-                obj["status"] = receipt.status;
-                obj["currency"] = receipt.currency;
-                obj["amount_total"] = receipt.amount_total;
-                obj["customer_name"] = receipt.customer_name;
-                obj["customer_email"] = receipt.customer_email;
-                obj["payment_status"] = receipt.payment_status;
-                obj["timestamp"] = receipt.timestamp;
-                json_receipts.push_back(obj);
-            }
-            boost::json::object response_obj;
-            response_obj["receipts"] = json_receipts;
-            std::string response_body = boost::json::serialize(response_obj);
-            return res_(http::status::ok, response_body, "application/json");
-        } catch (const std::exception& e) {
-            return res_(http::status::internal_server_error, std::string("Error retrieving receipts by email: ") + e.what(), "application/json");
-        }
-    }
-
-    if (req.method() == http::verb::get && req.target().starts_with("/success")) {
-        std::cout << "Received success request: " << req.target() << std::endl;
-
-        std::string target = std::string(req.target());
-        std::size_t pos = target.find("session_id=");
-        std::string session_id = (pos != std::string::npos) ? target.substr(pos + 11) : "";
-
-        if (!session_id.empty()) {
-            std::cout << "Session ID: " << session_id << std::endl;
-
-            std::string payment_details = app->handle_retrieve_payment_details(session_id);
-
-            if (payment_details.empty()) {
-                return res_(http::status::internal_server_error, "Failed to retrieve payment details", "application/json");
-            }
-
-            boost::json::object response_obj;
-            try {
-                response_obj = boost::json::parse(payment_details).as_object();
-            } catch (const std::exception& e) {
-                std::cerr << "Failed to parse payment details: " << e.what() << std::endl;
-                return res_(http::status::internal_server_error, "Error parsing payment details", "application/json");
-            }
-
-            try {
-                Receipt receipt = Receipt::from_json(response_obj);
-                //app->handle_retrieve_payment_details(session_id); // Store in the app
-            } catch (const std::exception& e) {
-                std::cerr << "Failed to store payment details: " << e.what() << std::endl;
-                return res_(http::status::internal_server_error, "Error storing payment details", "application/json");
-            }
-
-            http::response<http::string_body> res{http::status::see_other, req.version()};
-            res.set(http::field::location, "/");
-            res.keep_alive(req.keep_alive());
-            return res;
-        }
-
-        return res_(http::status::bad_request, "Session ID is missing", "application/json");
-    }
-
-    if (req.method() == http::verb::get && req.target() == "/cancel") {
-        boost::json::object response_obj;
-        response_obj["status"] = "cancelled";
-        response_obj["message"] = "Payment was cancelled by the user";
-        std::string response_body = boost::json::serialize(response_obj);
-
-        return res_(http::status::ok, response_body, "application/json");
-    }
-
-    if (req.method() != http::verb::get &&
-        req.method() != http::verb::head) {
-        return res_(http::status::bad_request, "Unknown HTTP-method", "text/html");
-    }
-
-    if (req.target().empty() ||
-        req.target()[0] != '/' ||
-        req.target().find("..") != beast::string_view::npos) {
+    if (req.target().empty() || req.target()[0] != '/' || req.target().find("..") != beast::string_view::npos) {
         return res_(http::status::bad_request, "Illegal request-target", "text/html");
     }
 
-    std::string path = path_cat(doc_root, req.target());
     std::string target = req.target();
+    if (target == "/status") {
+        auto system_service = app->get_system_service();
+        auto status = system_service->get_status();
+        auto body = boost::json::serialize(status);
+        return res_(http::status::ok, body, "application/json");
+    }
+
+    std::string path = path_cat(doc_root, req.target());
     if (req.target().back() == '/') {
         path.append("index2.html");
     }
@@ -535,8 +242,8 @@ http::message_generator handle_request(
 
     http::response<http::file_body> res{
         std::piecewise_construct,
-        std::make_tuple(std::move(body)),
-        std::make_tuple(http::status::ok, req.version())};
+            std::make_tuple(std::move(body)),
+            std::make_tuple(http::status::ok, req.version())};
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
     res.set(http::field::content_type, mime_type(path));
     res.content_length(size);
@@ -544,9 +251,64 @@ http::message_generator handle_request(
     return res;
 }
 
-std::string get_image_name(const std::string& target) {
-    std::size_t pos = target.find_last_of('/');
-    return (pos == std::string::npos) ? target : target.substr(pos + 1);
+// Function to handle POST requests
+template <class Body, class Allocator>
+http::message_generator handle_post_request(
+        beast::string_view doc_root,
+        http::request<Body, http::basic_fields<Allocator>>&& req,
+        std::shared_ptr<Application> app) {
+
+    auto const res_ = [&req](http::status status, const std::string& body, const std::string& content_type = "application/json") {
+        http::response<http::string_body> res{status, req.version()};
+        res.set(http::field::content_type, content_type);
+        res.keep_alive(req.keep_alive());
+        res.body() = body;
+        res.prepare_payload();
+        return res;
+    };
+
+    if (req.target() == "/do-something") {
+        // Parse the request body
+        boost::json::value parsed_body = boost::json::parse(req.body());
+        boost::json::object result;
+        // Add logic here for processing the POST data
+        if (parsed_body.is_object()) {
+            boost::json::object obj = parsed_body.as_object();
+            // Check specific conditions and modify the response accordingly
+            if (obj.contains("action") && obj["action"].as_string() == "update") {
+                result["message"] = "Update successful";
+            } else {
+                result["message"] = "Invalid action";
+            }
+        }
+        auto body = boost::json::serialize(result);
+        return res_(http::status::ok, body, "application/json");
+    }
+
+    return res_(http::status::not_found, "Endpoint not found", "application/json");
+}
+
+template <class Body, class Allocator>
+http::message_generator handle_request(
+        beast::string_view doc_root,
+        http::request<Body, http::basic_fields<Allocator>>&& req,
+        std::shared_ptr<Application> app) {
+
+    if (req.method() == http::verb::get || req.method() == http::verb::head) {
+        return handle_get_request(doc_root, std::move(req), app);
+    }
+    else if (req.method() == http::verb::post) {
+        return handle_post_request(doc_root, std::move(req), app);
+    }
+    else {
+        // Method not allowed
+        http::response<http::string_body> res{http::status::method_not_allowed, req.version()};
+        res.set(http::field::content_type, "text/html");
+        res.keep_alive(req.keep_alive());
+        res.body() = "Method not allowed";
+        res.prepare_payload();
+        return res;
+    }
 }
 
 void fail(beast::error_code ec, char const* what) {
@@ -556,6 +318,7 @@ void fail(beast::error_code ec, char const* what) {
     std::cerr << what << ": " << ec.message() << "\n";
 }
 
+// Session class to manage client-server interactions
 class session : public std::enable_shared_from_this<session> {
     beast::ssl_stream<beast::tcp_stream> stream_;
     beast::flat_buffer buffer_;
@@ -564,134 +327,108 @@ class session : public std::enable_shared_from_this<session> {
     http::request<http::string_body> req_;
 
     public:
-    explicit
-        session(
-                tcp::socket&& socket,
-                ssl::context& ctx,
-                std::shared_ptr<std::string const> const& doc_root,
-                std::shared_ptr<Application> app)
-        : stream_(std::move(socket), ctx)
-          , doc_root_(doc_root), app_(app)
+    explicit session(
+            tcp::socket&& socket,
+            ssl::context& ctx,
+            std::shared_ptr<std::string const> const& doc_root,
+            std::shared_ptr<Application> app)
+        : stream_(std::move(socket), ctx), doc_root_(doc_root), app_(app)
     {
     }
 
-    void
-        run()
-        {
-            net::dispatch(
-                    stream_.get_executor(),
-                    beast::bind_front_handler(
-                        &session::on_run,
-                        shared_from_this()));
+    void run() {
+        net::dispatch(
+                stream_.get_executor(),
+                beast::bind_front_handler(
+                    &session::on_run,
+                    shared_from_this()));
+    }
+
+    void on_run() {
+        beast::get_lowest_layer(stream_).expires_after(
+                std::chrono::seconds(30));
+
+        stream_.async_handshake(
+                ssl::stream_base::server,
+                beast::bind_front_handler(
+                    &session::on_handshake,
+                    shared_from_this()));
+    }
+
+    void on_handshake(beast::error_code ec) {
+        if (ec)
+            return fail(ec, "handshake");
+
+        do_read();
+    }
+
+    void do_read() {
+        req_ = {};
+
+        beast::get_lowest_layer(stream_).expires_after(std::chrono::seconds(30));
+
+        http::async_read(stream_, buffer_, req_,
+                beast::bind_front_handler(
+                    &session::on_read,
+                    shared_from_this()));
+    }
+
+    void on_read(beast::error_code ec, std::size_t bytes_transferred) {
+        boost::ignore_unused(bytes_transferred);
+
+        if (ec == http::error::end_of_stream)
+            return do_close();
+
+        if (ec)
+            return fail(ec, "read");
+
+        app_->get_system_service()->increment_request_count();
+
+        send_response(
+                handle_request(*doc_root_, std::move(req_), app_));
+    }
+
+    void send_response(http::message_generator&& msg) {
+        bool keep_alive = msg.keep_alive();
+
+        beast::async_write(
+                stream_,
+                std::move(msg),
+                beast::bind_front_handler(
+                    &session::on_write,
+                    this->shared_from_this(),
+                    keep_alive));
+    }
+
+    void on_write(bool keep_alive, beast::error_code ec, std::size_t bytes_transferred) {
+        boost::ignore_unused(bytes_transferred);
+
+        if (ec)
+            return fail(ec, "write");
+
+        if (!keep_alive) {
+            return do_close();
         }
 
-    void
-        on_run()
-        {
-            beast::get_lowest_layer(stream_).expires_after(
-                    std::chrono::seconds(30));
+        do_read();
+    }
 
-            stream_.async_handshake(
-                    ssl::stream_base::server,
-                    beast::bind_front_handler(
-                        &session::on_handshake,
-                        shared_from_this()));
-        }
+    void do_close() {
+        beast::get_lowest_layer(stream_).expires_after(std::chrono::seconds(30));
 
-    void
-        on_handshake(beast::error_code ec)
-        {
-            if (ec)
-                return fail(ec, "handshake");
+        stream_.async_shutdown(
+                beast::bind_front_handler(
+                    &session::on_shutdown,
+                    shared_from_this()));
+    }
 
-            do_read();
-        }
-
-    void
-        do_read()
-        {
-
-            req_ = {};
-
-            beast::get_lowest_layer(stream_).expires_after(std::chrono::seconds(30));
-
-            http::async_read(stream_, buffer_, req_,
-                    beast::bind_front_handler(
-                        &session::on_read,
-                        shared_from_this()));
-        }
-
-    void
-        on_read(
-                beast::error_code ec,
-                std::size_t bytes_transferred)
-        {
-            boost::ignore_unused(bytes_transferred);
-
-            if (ec == http::error::end_of_stream)
-                return do_close();
-
-            if (ec)
-                return fail(ec, "read");
-
-            send_response(
-                    handle_request(*doc_root_, std::move(req_), app_));
-        }
-
-    void
-        send_response(http::message_generator&& msg)
-        {
-            bool keep_alive = msg.keep_alive();
-
-            beast::async_write(
-                    stream_,
-                    std::move(msg),
-                    beast::bind_front_handler(
-                        &session::on_write,
-                        this->shared_from_this(),
-                        keep_alive));
-        }
-
-    void
-        on_write(
-                bool keep_alive,
-                beast::error_code ec,
-                std::size_t bytes_transferred)
-        {
-            boost::ignore_unused(bytes_transferred);
-
-            if (ec)
-                return fail(ec, "write");
-
-            if (!keep_alive)
-            {
-
-                return do_close();
-            }
-
-            do_read();
-        }
-
-    void
-        do_close()
-        {
-            beast::get_lowest_layer(stream_).expires_after(std::chrono::seconds(30));
-
-            stream_.async_shutdown(
-                    beast::bind_front_handler(
-                        &session::on_shutdown,
-                        shared_from_this()));
-        }
-
-    void
-        on_shutdown(beast::error_code ec)
-        {
-            if (ec)
-                return fail(ec, "shutdown");
-
-        }
+    void on_shutdown(beast::error_code ec) {
+        if (ec)
+            return fail(ec, "shutdown");
+    }
 };
 
+// Listener class to accept incoming connections
 class listener : public std::enable_shared_from_this<listener> {
     net::io_context& ioc_;
     ssl::context& ctx_;
@@ -706,82 +443,67 @@ class listener : public std::enable_shared_from_this<listener> {
             tcp::endpoint endpoint,
             std::shared_ptr<std::string const> const& doc_root,
             std::shared_ptr<Application> app)
-        : ioc_(ioc)
-          , ctx_(ctx)
-          , acceptor_(ioc)
-          , doc_root_(doc_root)
-          , app_(app)
+        : ioc_(ioc), ctx_(ctx), acceptor_(ioc), doc_root_(doc_root), app_(app)
     {
         beast::error_code ec;
 
         acceptor_.open(endpoint.protocol(), ec);
-        if (ec)
-        {
+        if (ec) {
             fail(ec, "open");
             return;
         }
 
         acceptor_.set_option(net::socket_base::reuse_address(true), ec);
-        if (ec)
-        {
+        if (ec) {
             fail(ec, "set_option");
             return;
         }
 
         acceptor_.bind(endpoint, ec);
-        if (ec)
-        {
+        if (ec) {
             fail(ec, "bind");
             return;
         }
 
         acceptor_.listen(
                 net::socket_base::max_listen_connections, ec);
-        if (ec)
-        {
+        if (ec) {
             fail(ec, "listen");
             return;
         }
     }
 
-    void
-        run()
-        {
-            do_accept();
-        }
+    void run() {
+        do_accept();
+    }
 
     private:
-    void
-        do_accept()
-        {
-            acceptor_.async_accept(
-                    net::make_strand(ioc_),
-                    beast::bind_front_handler(
-                        &listener::on_accept,
-                        shared_from_this()));
+    void do_accept() {
+        acceptor_.async_accept(
+                net::make_strand(ioc_),
+                beast::bind_front_handler(
+                    &listener::on_accept,
+                    shared_from_this()));
+    }
+
+    void on_accept(beast::error_code ec, tcp::socket socket) {
+        if (ec) {
+            fail(ec, "accept");
+            return; // To avoid infinite loop
+        }
+        else {
+            std::make_shared<session>(
+                    std::move(socket),
+                    ctx_,
+                    doc_root_,
+                    app_)->run();
         }
 
-    void
-        on_accept(beast::error_code ec, tcp::socket socket)
-        {
-            if (ec)
-            {
-                fail(ec, "accept");
-                return; // To avoid infinite loop
-            }
-            else
-            {
-                std::make_shared<session>(
-                        std::move(socket),
-                        ctx_,
-                        doc_root_,
-                        app_)->run();
-            }
-
-            do_accept();
-        }
+        do_accept();
+    }
 };
 
+// Main function to initialize and run the server
 int main(int argc, char* argv[]) {
     if (argc != 5) {
         std::cerr <<
@@ -812,8 +534,7 @@ int main(int argc, char* argv[]) {
     v.reserve(threads - 1);
     for (auto i = threads - 1; i > 0; --i)
         v.emplace_back(
-                [&ioc]
-                {
+                [&ioc] {
                 ioc.run();
                 });
     ioc.run();
