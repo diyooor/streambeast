@@ -22,7 +22,6 @@
 #include <map>
 #include <sstream> // For stringstream
 #include <iomanip> // For put_time
-#include <curl/curl.h>
 #include <string> // For std::string and std::to_string
 #include <boost/beast/core/detail/base64.hpp> // For base64 encoding
 #include <thread>
