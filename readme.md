@@ -33,7 +33,9 @@ To run the application, use the following command:
 
 Contributions to streambeast are welcome! If you have suggestions for improvements or would like to contribute new features, please feel free to submit a pull request or open an issue.
 
-## MIT License
+## License
+
+MIT License
 
 Copyright (c) 2024 Diyor Sattarov (diyorsattarov) 
 
