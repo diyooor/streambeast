@@ -144,8 +144,8 @@ public:
 
             // Create URL-encoded form body
             std::string body = 
-                "success_url=" + url_encode("https://sattar.xyz/success?session_id={CHECKOUT_SESSION_ID}") + // Ensure session_id is returned
-                "&cancel_url=" + url_encode("https://sattar.xyz/cancel") +
+                "success_url=" + url_encode("") + // Ensure session_id is returned
+                "&cancel_url=" + url_encode("") +
                 "&payment_method_types[]=" + url_encode("card") +
                 "&line_items[0][price_data][currency]=" + url_encode("usd") +
                 "&line_items[0][price_data][product_data][name]=" + url_encode("T-shirt") +
@@ -154,11 +154,11 @@ public:
                 "&mode=" + url_encode("payment");
 
             // Set up an HTTP POST request message.
-            http::request<http::string_body> req{http::verb::post, "/v1/checkout/sessions", 11};
+            http::request<http::string_body> req{http::verb::post, "", 11};
             req.set(http::field::host, host);
             req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
             req.set(http::field::content_type, "application/x-www-form-urlencoded");
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
+            req.set(http::field::authorization, "");
             req.body() = body;
             req.prepare_payload();
 
@@ -222,7 +222,7 @@ public:
             http::request<http::empty_body> req{http::verb::get, target, 11};
             req.set(http::field::host, host);
             req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
+            req.set(http::field::authorization, "");
 
             // Send request and read response
             http::write(stream, req);
@@ -482,7 +482,7 @@ http::message_generator handle_request(
         return res;
     };
 
-    if (req.method() == http::verb::post && req.target() == "/api/external") {
+    if (req.method() == http::verb::post && req.target() == "") {
         try {
             // Extract the image from the request body
             std::vector<unsigned char> image_data(req.body().begin(), req.body().end());
@@ -501,7 +501,7 @@ http::message_generator handle_request(
         }
     }
 
-    if (req.method() == http::verb::post && req.target() == "/api/create-checkout-session") {
+    if (req.method() == http::verb::post && req.target() == "") {
         try {
             // Parse the JSON body
             auto json_body = boost::json::parse(req.body());
@@ -538,7 +538,7 @@ http::message_generator handle_request(
     }
 
     // Handle GET request for real-time streaming
-    if (req.method() == http::verb::get && req.target() == "/stream") {
+    if (req.method() == http::verb::get && req.target() == "") {
         auto image_data = app->handle_get_latest_image();
 
         if (!image_data.empty()) {
@@ -555,7 +555,7 @@ http::message_generator handle_request(
     }
 
     // Handle GET request for image by timestamp
-    if (req.method() == http::verb::get && req.target().starts_with("/image/")) {
+    if (req.method() == http::verb::get && req.target().starts_with("")) {
         // Extract the timestamp from the URI
         std::string target = std::string(req.target());
         std::string prefix = "/image/";
@@ -580,7 +580,7 @@ http::message_generator handle_request(
     }
 
     // Handle GET request for available timestamps
-    if (req.method() == http::verb::get && req.target() == "/timestamps") {
+    if (req.method() == http::verb::get && req.target() == "") {
         auto timestamps = app->handle_get_available_timestamps();
         boost::json::array json_timestamps;
 
@@ -596,7 +596,7 @@ http::message_generator handle_request(
     }
 
     // Handle GET request for /success endpoint
-    if (req.method() == http::verb::get && req.target().starts_with("/success")) {
+    if (req.method() == http::verb::get && req.target().starts_with("")) {
         std::cout << "Received success request: " << req.target() << std::endl;
 
         std::string target = std::string(req.target());
@@ -641,7 +641,7 @@ http::message_generator handle_request(
     }
 
     // Handle GET request for cancel endpoint
-    if (req.method() == http::verb::get && req.target() == "/cancel") {
+    if (req.method() == http::verb::get && req.target() == "") {
         boost::json::object response_obj;
         response_obj["status"] = "cancelled";
         response_obj["message"] = "Payment was cancelled by the user";
@@ -700,7 +700,7 @@ http::message_generator handle_request(
 }
 
 std::string get_image_name(const std::string& target) {
-    std::size_t pos = target.find_last_of('/');
+    std::size_t pos = target.find_last_of('');
     return (pos == std::string::npos) ? target : target.substr(pos + 1);
 }
 
