@@ -267,7 +267,7 @@ http::message_generator handle_post_request(
         return res;
     };
 
-    if (req.target() == "/do-something") {
+    if (req.target() == "") {
         // Parse the request body
         boost::json::value parsed_body = boost::json::parse(req.body());
         boost::json::object result;
