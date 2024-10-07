@@ -100,8 +100,8 @@ public:
 
     std::string createCheckoutSession() {
         std::string body = 
-            "success_url=" + url_encode("https://sattar.xyz/success?session_id={CHECKOUT_SESSION_ID}") + 
-            "&cancel_url=" + url_encode("https://sattar.xyz/cancel") +
+            "success_url=" + url_encode("/success?session_id={CHECKOUT_SESSION_ID}") + 
+            "&cancel_url=" + url_encode("/cancel") +
             "&payment_method_types[]=" + url_encode("card") +
             "&line_items[0][price_data][currency]=" + url_encode("usd") +
             "&line_items[0][price_data][product_data][name]=" + url_encode("T-shirt") +
@@ -181,8 +181,8 @@ private:
             });
 
             net::io_context ioc;
-            std::string const host = "api.stripe.com";
-            std::string const port = "443";
+            std::string const host = "";
+            std::string const port = "";
 
             tcp::resolver resolver{ioc};
             auto const results = resolver.resolve(host, port);
@@ -195,10 +195,10 @@ private:
             http::request<http::string_body> req{method, target, 11};
             req.set(http::field::host, host);
             req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
+            req.set(http::field::authorization, "");
 
             if (!body.empty()) {
-                req.set(http::field::content_type, "application/x-www-form-urlencoded");
+                req.set(http::field::content_type, "");
                 req.body() = body;
                 req.prepare_payload();
             }
@@ -350,7 +350,7 @@ http::message_generator handle_request(
 
             return res_(http::status::ok, response_body, "application/json");
         } catch (const boost::system::system_error& e) {
-            return res_(http::status::bad_request, std::string("Error parsing JSON: ") + e.what(), "application/json");
+            return res_(http::status::bad_request, std::string("Error parsing JSON: ") + e.what(), "");
         } catch (const std::exception& e) {
             return res_(http::status::bad_request, std::string("Error creating checkout session: ") + e.what(), "application/json");
         }
@@ -388,7 +388,7 @@ http::message_generator handle_request(
             auto receipts = app->handle_get_receipts_by_name(name);
 
             if (receipts.empty()) {
-                return res_(http::status::not_found, "No receipts found for the given name", "application/json");
+                return res_(http::status::not_found, "No receipts found for the given name", "");
             }
 
             boost::json::array json_receipts;
