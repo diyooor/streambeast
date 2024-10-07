@@ -145,8 +145,8 @@ public:
 
             // Create URL-encoded form body
             std::string body = 
-                "success_url=" + url_encode("https://sattar.xyz/success?session_id={CHECKOUT_SESSION_ID}") + // Ensure session_id is returned
-                "&cancel_url=" + url_encode("https://sattar.xyz/cancel") +
+                "success_url=" + url_encode("/success?session_id={CHECKOUT_SESSION_ID}") + // Ensure session_id is returned
+                "&cancel_url=" + url_encode("/cancel") +
                 "&payment_method_types[]=" + url_encode("card") +
                 "&line_items[0][price_data][currency]=" + url_encode("usd") +
                 "&line_items[0][price_data][product_data][name]=" + url_encode("T-shirt") +
@@ -159,7 +159,7 @@ public:
             req.set(http::field::host, host);
             req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
             req.set(http::field::content_type, "application/x-www-form-urlencoded");
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
+            req.set(http::field::authorization, "");
             req.body() = body;
             req.prepare_payload();
 
@@ -208,8 +208,8 @@ public:
 
             // I/O context and resolver setup
             net::io_context ioc;
-            std::string const host = "api.stripe.com";
-            std::string const port = "443";
+            std::string const host = "";
+            std::string const port = "";
             tcp::resolver resolver{ioc};
             auto const results = resolver.resolve(host, port);
 
@@ -223,7 +223,7 @@ public:
             http::request<http::empty_body> req{http::verb::get, target, 11};
             req.set(http::field::host, host);
             req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            req.set(http::field::authorization, "Bearer sk_test_51PjIZuAB0gpFN8ie2ufCaOW0HoVteth7ZcsBr3KM6XP1IFz7x7FuVAv0EF6hCJfNBSYAaPFVYYvkn3NExzktaGUc00Auhh1qpw");
+            req.set(http::field::authorization, "");
 
             // Send request and read response
             http::write(stream, req);
@@ -242,7 +242,7 @@ public:
             }
 
             // Debug: Log the response
-            std::cout << "Stripe Response: " << res.body() << std::endl;
+            std::cout << "Response: " << res.body() << std::endl;
 
             // Parse the payment details and store the receipt
             auto response_obj = boost::json::parse(res.body()).as_object();
