@@ -78,32 +78,6 @@ std::string url_decode(const std::string& value) {
     return decoded.str();
 }
 
-// Define Receipt structure
-struct Receipt {
-    std::string id;
-    std::string status;
-    std::string currency;
-    int amount_total;
-    std::string customer_name;
-    std::string customer_email;
-    std::string payment_status;
-    std::string timestamp;
-
-    // Construct a Receipt from JSON object
-    static Receipt from_json(const boost::json::object& obj) {
-        return Receipt{
-            obj.at("id").as_string().c_str(),
-            obj.at("status").as_string().c_str(),
-            obj.at("currency").as_string().c_str(),
-            static_cast<int>(obj.at("amount_total").as_int64()),
-            obj.at("customer_details").as_object().at("name").as_string().c_str(),
-            obj.at("customer_details").as_object().at("email").as_string().c_str(),
-            obj.at("payment_status").as_string().c_str(),
-            std::to_string(obj.at("created").as_int64())
-        };
-    }
-};
-
 // The ClientService class manages interactions with the Stripe API
 class ClientService {
 public:
@@ -145,8 +119,8 @@ public:
 
             // Create URL-encoded form body
             std::string body = 
-                "success_url=" + url_encode("/success?session_id={CHECKOUT_SESSION_ID}") + // Ensure session_id is returned
-                "&cancel_url=" + url_encode("/cancel") +
+                "success_url=" + url_encode("/") + // Ensure session_id is returned
+                "&cancel_url=" + url_encode("/cl") +
                 "&payment_method_types[]=" + url_encode("card") +
                 "&line_items[0][price_data][currency]=" + url_encode("usd") +
                 "&line_items[0][price_data][product_data][name]=" + url_encode("T-shirt") +
@@ -155,10 +129,10 @@ public:
                 "&mode=" + url_encode("payment");
 
             // Set up an HTTP POST request message.
-            http::request<http::string_body> req{http::verb::post, "/v1/checkout/sessions", 11};
+            http::request<http::string_body> req{http::verb::post, "", 11};
             req.set(http::field::host, host);
             req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            req.set(http::field::content_type, "application/x-www-form-urlencoded");
+            req.set(http::field::content_type, "a");
             req.set(http::field::authorization, "");
             req.body() = body;
             req.prepare_payload();
@@ -219,7 +193,7 @@ public:
             stream.handshake(ssl::stream_base::client);
 
             // Setup HTTP GET request for payment details
-            std::string target = "/v1/checkout/sessions/" + session_id;
+            std::string target = "" + session_id;
             http::request<http::empty_body> req{http::verb::get, target, 11};
             req.set(http::field::host, host);
             req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
